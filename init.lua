@@ -16,3 +16,9 @@ opt.listchars:append {
   extends = '»',
   precedes = '«',
 }
+
+vim.filetype.add({
+  extension = {
+    mdx = 'mdx'
+  }
+})
