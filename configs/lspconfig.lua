@@ -15,12 +15,11 @@ for _, lsp in ipairs(servers) do
 end
 
 --
--- lspconfig.pyright.setup { blabla}
 
-lspconfig.rome.setup {
+lspconfig.biome.setup {
   on_attach = on_attach,
   capabilities = capabilities,
-  root_dir = root_pattern("rome.json"),
+  root_dir = root_pattern("biome.json"),
 }
 
 lspconfig.gopls.setup {
