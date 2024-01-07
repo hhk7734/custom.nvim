@@ -17,6 +17,8 @@ opt.listchars:append {
   precedes = '«',
 }
 
+opt.clipboard = 'unnamedplus'
+
 vim.filetype.add({
   extension = {
     mdx = 'mdx'
