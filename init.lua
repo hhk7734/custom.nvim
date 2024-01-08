@@ -22,6 +22,8 @@ opt.clipboard = 'unnamedplus'
 opt.tabstop = 4
 opt.shiftwidth = 4
 
+opt.keymodel = 'startsel,stopsel'
+
 vim.filetype.add({
   extension = {
     mdx = 'mdx'
