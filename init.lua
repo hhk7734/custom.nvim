@@ -19,6 +19,9 @@ opt.listchars:append {
 
 opt.clipboard = 'unnamedplus'
 
+opt.tabstop = 4
+opt.shiftwidth = 4
+
 vim.filetype.add({
   extension = {
     mdx = 'mdx'

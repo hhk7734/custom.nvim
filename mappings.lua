@@ -9,4 +9,11 @@ M.general = {
 
 -- more keybinds!
 
+M.abc = {
+  i = {
+    ["<Tab>"] = { "<C-t>", "add indent" },
+    ["<S-Tab>"] = { "<C-d>", "remove indent" },
+  },
+}
+
 return M
