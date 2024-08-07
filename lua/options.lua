@@ -1,6 +1,33 @@
 require "nvchad.options"
 
--- add yours here!
+local opt = vim.opt
 
--- local o = vim.o
--- o.cursorlineopt ='both' -- to enable cursorline!
+-- local autocmd = vim.api.nvim_create_autocmd
+
+-- Auto resize panes when resizing nvim window
+-- autocmd("VimResized", {
+--   pattern = "*",
+--   command = "tabdo wincmd =",
+-- })
+
+opt.list = true
+opt.listchars:append {
+  tab = "»-",
+  lead = "·",
+  trail = "·",
+  extends = "»",
+  precedes = "«",
+}
+
+opt.clipboard = "unnamedplus"
+
+opt.tabstop = 4
+opt.shiftwidth = 4
+
+opt.keymodel = "startsel,stopsel"
+
+vim.filetype.add {
+  extension = {
+    mdx = "mdx",
+  },
+}
