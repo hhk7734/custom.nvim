@@ -1,16 +1,11 @@
 require "nvchad.options"
 
+-- options
+local o = vim.o
+-- list and map style options helper
 local opt = vim.opt
 
--- local autocmd = vim.api.nvim_create_autocmd
-
--- Auto resize panes when resizing nvim window
--- autocmd("VimResized", {
---   pattern = "*",
---   command = "tabdo wincmd =",
--- })
-
-opt.list = true
+o.list = true
 opt.listchars:append {
   tab = "»-",
   lead = "·",
@@ -20,14 +15,14 @@ opt.listchars:append {
 }
 
 -- install xclip
-opt.clipboard = "unnamedplus"
+o.clipboard = "unnamedplus"
 
-opt.tabstop = 4
-opt.shiftwidth = 4
+o.tabstop = 4
+o.shiftwidth = 4
 
-opt.keymodel = "startsel,stopsel"
+o.keymodel = "startsel,stopsel"
 
-opt.autochdir = true
+o.autochdir = true
 
 vim.filetype.add {
   extension = {
