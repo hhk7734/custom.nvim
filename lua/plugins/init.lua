@@ -28,29 +28,14 @@ return {
         "markdown",
         "markdown_inline",
       },
+
+      highlight = {
+        enable = true,
+        use_languagetree = true,
+      },
+
       indent = {
         enable = true,
-        -- disable = {
-        --   "python"
-        -- },
-      },
-    },
-  },
-
-  {
-    "nvim-tree/nvim-tree.lua",
-    opts = {
-      git = {
-        enable = true,
-      },
-
-      renderer = {
-        highlight_git = true,
-        icons = {
-          show = {
-            git = true,
-          },
-        },
       },
     },
   },
