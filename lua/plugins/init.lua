@@ -51,11 +51,13 @@ return {
         DEPRECATED = { icon = " ", color = "warning" },
       },
     },
+    lazy = false,
   },
 
   {
     "folke/trouble.nvim",
     dependencies = { "nvim-tree/nvim-web-devicons" },
     opts = {},
+    lazy = false,
   },
 }
