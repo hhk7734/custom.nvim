@@ -27,9 +27,10 @@ opt.shiftwidth = 4
 
 opt.keymodel = "startsel,stopsel"
 
+opt.autochdir = true
+
 vim.filetype.add {
   extension = {
     mdx = "mdx",
   },
 }
-
