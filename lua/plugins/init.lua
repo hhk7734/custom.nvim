@@ -16,6 +16,7 @@ return {
   {
     "nvim-treesitter/nvim-treesitter",
     opts = {
+      -- https://github.com/nvim-treesitter/nvim-treesitter?tab=readme-ov-file#supported-languages
       ensure_installed = {
         "vim",
         "lua",
@@ -27,6 +28,7 @@ return {
         "c",
         "markdown",
         "markdown_inline",
+        "go",
       },
 
       highlight = {
