@@ -19,6 +19,7 @@ opt.listchars:append {
   precedes = "«",
 }
 
+-- install xclip
 opt.clipboard = "unnamedplus"
 
 opt.tabstop = 4
@@ -31,3 +32,4 @@ vim.filetype.add {
     mdx = "mdx",
   },
 }
+
