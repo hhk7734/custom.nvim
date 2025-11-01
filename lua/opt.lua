@@ -4,13 +4,13 @@
 local opt = vim.opt
 
 opt.list = true
-opt.listchars:append {
+opt.listchars:append({
   tab = "»-",
   lead = "·",
   trail = "·",
   extends = "»",
   precedes = "«",
-}
+})
 
 -- install xclip
 opt.clipboard = "unnamedplus"
