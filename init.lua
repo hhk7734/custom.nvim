@@ -5,5 +5,6 @@ else
 end
 
 -- common
-require "opt"
+require "lazy-config"
 require "keymap"
+require "opt"

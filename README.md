@@ -18,8 +18,9 @@ rm -rf ~/.local/share/nvim
 
 ### Startup
 
-> [!NOTE] Reference
-> [Neovim / Starting # Startup](https://neovim.io/doc/user/starting.html#startup)
+> [!NOTE]
+> References:
+> - [Neovim / Starting # Startup](https://neovim.io/doc/user/starting.html#startup)
 
 1. Set `shell`.
 2. Process the arguments.
@@ -35,9 +36,10 @@ rm -rf ~/.local/share/nvim
 
 ### lua
 
-> [!NOTE] Reference
-> [Neovim / Lua-guide](https://neovim.io/doc/user/lua-guide.html)
-> [Neovim / Lua](https://neovim.io/doc/user/lua.html)
+> [!NOTE]
+> References:
+> - [Neovim / Lua-guide](https://neovim.io/doc/user/lua-guide.html)
+> - [Neovim / Lua](https://neovim.io/doc/user/lua.html)
 
 Neovim loads `init.lua` from `~/.config/nvim/` by default.
 
@@ -55,6 +57,7 @@ Neovim loads `init.lua` from `~/.config/nvim/` by default.
   - lsp/
   - `lua/`: lua plugins
   - pack/
+    - Neovim 0.12+ supports `vim.pack.add`
   - parser/
   - plugin/
   - queries/
@@ -65,8 +68,17 @@ Neovim loads `init.lua` from `~/.config/nvim/` by default.
 
 ### options
 
-> [!NOTE] Reference
-> [Neovim / Options](https://neovim.io/doc/user/options.html)
+> [!NOTE]
+> References:
+> - [Neovim / Options](https://neovim.io/doc/user/options.html)
 
 - `:lua vim.print(vim.o.<var>)`
 - `:lua vim.print(vim.opt.<var>:get())`
+
+### lazy.nvim
+
+> [!NOTE]
+> References:
+> - [lazy.nvim](https://lazy.folke.io/)
+
+- `:Lazy`: opens the lazy.nvim UI.
