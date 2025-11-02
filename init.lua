@@ -5,6 +5,7 @@ else
 end
 
 -- common
+require("config.lsp")
 require("lazy-config")
 require("keymap")
 require("opt")
