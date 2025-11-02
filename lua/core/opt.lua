@@ -12,8 +12,9 @@ opt.listchars:append({
   precedes = "«",
 })
 
--- install xclip
-opt.clipboard = "unnamedplus"
+opt.clipboard = "unnamedplus" -- install xclip
+opt.cursorline = true
+opt.cursorlineopt = "number"
 
 opt.tabstop = 4
 opt.shiftwidth = 4
@@ -22,4 +23,7 @@ opt.keymodel = { "startsel", "stopsel" }
 
 opt.autochdir = true
 
+-- Numbers
 opt.number = true
+opt.numberwidth = 2
+opt.ruler = false
