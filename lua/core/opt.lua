@@ -21,3 +21,5 @@ opt.shiftwidth = 4
 opt.keymodel = { "startsel", "stopsel" }
 
 opt.autochdir = true
+
+opt.number = true
