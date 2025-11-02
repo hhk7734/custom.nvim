@@ -6,6 +6,5 @@ end
 
 -- common
 require("core.keymap")
-require("core.lsp")
 require("core.opt")
 require("config.lazy")
