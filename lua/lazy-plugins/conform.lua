@@ -2,9 +2,6 @@ return {
   -- https://github.com/stevearc/conform.nvim
   "stevearc/conform.nvim",
 
-  -- Always load this plugin.
-  cond = true,
-
   -- Lazy-load on event. BufWritePre means before saving a buffer.
   event = { "BufWritePre" },
 
