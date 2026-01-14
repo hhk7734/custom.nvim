@@ -1,7 +1,7 @@
 return {
   "nvim-telescope/telescope.nvim",
 
-  tag = "0.1.8",
+  tag = "0.2.1",
 
   dependencies = {
     "nvim-lua/plenary.nvim",
@@ -10,28 +10,30 @@ return {
   -- Lazy-load on command.
   cmd = { "Telescope" },
 
-  opts = {
-    defaults = {
-      prompt_prefix = "   ",
-      selection_caret = " ",
-      entry_prefix = " ",
-      -- prompt layout configurations.
-      sorting_strategy = "ascending",
-      layout_config = {
-        horizontal = {
-          prompt_position = "top",
-          preview_width = 0.55,
+  opts = function()
+    return {
+      defaults = {
+        prompt_prefix = "   ",
+        selection_caret = " ",
+        entry_prefix = " ",
+        -- prompt layout configurations.
+        sorting_strategy = "ascending",
+        layout_config = {
+          horizontal = {
+            prompt_position = "top",
+            preview_width = 0.55,
+          },
+          width = 0.87,
+          height = 0.80,
         },
-        width = 0.87,
-        height = 0.80,
+        mappings = {
+          n = { ["q"] = require("telescope.actions").close },
+        },
       },
-      mappings = {
-        n = { ["q"] = require("telescope.actions").close },
-      },
-    },
-    pickers = {},
-    extensions = {},
-  },
+      pickers = {},
+      extensions = {},
+    }
+  end,
 
   config = function(_, opts)
     require("telescope").setup(opts)
