@@ -19,7 +19,7 @@ opt.cursorlineopt = "number"
 opt.tabstop = 4
 opt.shiftwidth = 4
 
-opt.keymodel = { "startsel", "stopsel" }
+opt.keymodel = { "startsel" }
 
 opt.autochdir = true
 
