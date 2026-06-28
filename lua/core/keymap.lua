@@ -14,3 +14,10 @@ map(
 -- indent
 map("i", "<Tab>", "<C-t>", { desc = "add indent" })
 map("i", "<S-Tab>", "<C-d>", { desc = "remove indent" })
+
+-- comment
+map("n", "<C-/>", "gcc", { remap = true, desc = "toggle comment" })
+map("v", "<C-/>", "gc", { remap = true, desc = "toggle comment" })
+-- Some terminals send <C-_> for <C-/>
+map("n", "<C-_>", "gcc", { remap = true, desc = "toggle comment" })
+map("v", "<C-_>", "gc", { remap = true, desc = "toggle comment" })
