@@ -14,16 +14,14 @@ return {
     "DiffviewFocusFiles",
   },
 
+  -- Lazy-load on keypress (also registers the mappings with lazy.nvim).
+  keys = {
+    { "<leader>gd", "<cmd>DiffviewOpen<CR>", desc = "diffview open (working tree)" },
+    { "<leader>gD", "<cmd>DiffviewOpen main...HEAD<CR>", desc = "diffview branch vs main" },
+    { "<leader>gh", "<cmd>DiffviewFileHistory %<CR>", desc = "diffview current file history" },
+    { "<leader>gH", "<cmd>DiffviewFileHistory<CR>", desc = "diffview branch history" },
+    { "<leader>gc", "<cmd>DiffviewClose<CR>", desc = "diffview close" },
+  },
+
   opts = {},
-
-  config = function(_, opts)
-    require("diffview").setup(opts)
-    local map = vim.keymap.set
-
-    map("n", "<leader>gd", "<cmd>DiffviewOpen<CR>", { desc = "diffview open (working tree)" })
-    map("n", "<leader>gD", "<cmd>DiffviewOpen main...HEAD<CR>", { desc = "diffview branch vs main" })
-    map("n", "<leader>gh", "<cmd>DiffviewFileHistory %<CR>", { desc = "diffview current file history" })
-    map("n", "<leader>gH", "<cmd>DiffviewFileHistory<CR>", { desc = "diffview branch history" })
-    map("n", "<leader>gc", "<cmd>DiffviewClose<CR>", { desc = "diffview close" })
-  end,
 }
