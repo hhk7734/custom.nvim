@@ -21,3 +21,6 @@ map("v", "<C-/>", "gc", { remap = true, desc = "toggle comment" })
 -- Some terminals send <C-_> for <C-/>
 map("n", "<C-_>", "gcc", { remap = true, desc = "toggle comment" })
 map("v", "<C-_>", "gc", { remap = true, desc = "toggle comment" })
+
+-- toggle soft line wrap
+map("n", "<leader>w", "<cmd>set wrap!<CR>", { desc = "toggle line wrap" })
