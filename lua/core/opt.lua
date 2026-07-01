@@ -12,6 +12,9 @@ opt.listchars:append({
   precedes = "«",
 })
 
+-- Enable 24-bit RGB color (required by bufferline and modern colorschemes).
+opt.termguicolors = true
+
 opt.clipboard = "unnamedplus" -- install xclip
 opt.cursorline = true
 opt.cursorlineopt = "number"
