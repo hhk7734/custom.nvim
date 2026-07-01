@@ -4,6 +4,11 @@ else
   -- without VSCode
 end
 
+-- Leaders must be set before any <leader> mapping is created and before
+-- lazy.nvim loads, so keymap/plugin specs resolve <leader> correctly.
+vim.g.mapleader = " "
+vim.g.maplocalleader = "\\"
+
 -- common
 require("core.keymap")
 require("core.opt")
