@@ -208,10 +208,26 @@ local function select_entry(entry)
 
   vim.cmd("edit " .. vim.fn.fnameescape(entry.path))
 
-  if entry.section == "staged" then
-    require("gitsigns").diffthis("HEAD", { vertical = true })
-  elseif not entry.untracked then
-    require("gitsigns").diffthis(nil, { vertical = true })
+  if entry.untracked then
+    render()
+    return
+  end
+
+  -- gitsigns attaches to a freshly-opened buffer asynchronously (its own
+  -- BufReadPost autocmd triggers it) and only fills in compare_text (the
+  -- index diff base) once that finishes; diffthis() asserts on it being
+  -- present, so poll the cache instead of racing it. (Calling attach()
+  -- again here would just be de-duplicated against the in-flight one, with
+  -- its callback firing immediately rather than on completion.) vim.wait
+  -- keeps the event loop turning while it does.
+  local bufnr = vim.api.nvim_get_current_buf()
+  local base = entry.section == "staged" and "HEAD" or nil
+  vim.wait(1000, function()
+    local bcache = require("gitsigns.cache").cache[bufnr]
+    return bcache ~= nil and bcache.compare_text ~= nil
+  end, 20)
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    require("gitsigns").diffthis(base, { vertical = true })
   end
 
   -- gitsigns.diffthis restores focus to this window (the file just opened);
