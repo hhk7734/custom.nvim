@@ -97,6 +97,13 @@ return {
             else
               vim.cmd("enew")
             end
+            -- The tree absorbed the closed window's space (every other window
+            -- is width-fixed); give it back its configured width.
+            for _, winId in ipairs(vim.api.nvim_list_wins()) do
+              if vim.bo[vim.api.nvim_win_get_buf(winId)].filetype == "NvimTree" then
+                vim.api.nvim_win_set_width(winId, opts.view.width)
+              end
+            end
           end, 10)
         end
       end,
