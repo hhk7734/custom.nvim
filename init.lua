@@ -13,3 +13,4 @@ vim.g.maplocalleader = "\\"
 require("core.keymap")
 require("core.opt")
 require("config.lazy")
+require("core.activitybar").setup()
