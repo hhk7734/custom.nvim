@@ -38,6 +38,13 @@ Managed with [lazy.nvim](https://github.com/folke/lazy.nvim); each spec lives in
 | [mason.nvim](https://github.com/mason-org/mason.nvim)                           | Package manager for external tools; auto-installs the configured tools (stylua, deno) on startup. |
 | [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim)                     | Git add/change/delete signs in the gutter.                                                        |
 | [diffview.nvim](https://github.com/sindrets/diffview.nvim)                      | Git diffs and file history (`<leader>g*`).                                                        |
+| [edgy.nvim](https://github.com/folke/edgy.nvim)                                 | Docks the bottom panel (terminal, problems) with titles and fixed sizes.                          |
+| [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim)                   | Integrated terminal in the bottom panel (`` Ctrl+` ``).                                           |
+| [trouble.nvim](https://github.com/folke/trouble.nvim)                           | Problems panel listing diagnostics (`<leader>xx`).                                                |
+| [dropbar.nvim](https://github.com/Bekaboo/dropbar.nvim)                         | VSCode-style breadcrumbs winbar (`<leader>;` to pick).                                            |
+
+A custom VSCode-style activity bar (icon column at the far left) lives in
+`lua/core/activitybar.lua`; toggle it with `:ActivityBar toggle`.
 
 ## 참고
 
