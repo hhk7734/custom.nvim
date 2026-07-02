@@ -9,7 +9,7 @@ return {
   opts = {
     theme = "palenight",
     options = {
-      -- The activity bar is a 3-column icon strip; no statusline under it.
+      -- The activity bar is a narrow icon strip; no statusline under it.
       disabled_filetypes = { statusline = { "activitybar" } },
     },
   },
