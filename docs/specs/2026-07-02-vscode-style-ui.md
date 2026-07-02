@@ -47,9 +47,9 @@ Neovim 0.12.2 satisfies every plugin's version requirement.
   statuscolumn.
 - An entries table of `{ icon, desc, action, is_active }`:
   - `󰉋` Explorer → existing nvim-tree focus-or-toggle behavior
-  - `` Search → `Telescope live_grep`
-  - `` Source Control → Diffview toggle
-  - `` Terminal → ToggleTerm toggle
+  - `` Search → `Telescope live_grep`
+  - `` Source Control → Diffview toggle
+  - `` Terminal → ToggleTerm toggle
   - `󰀪` Problems → Trouble diagnostics toggle
   - `⚙` Settings (rendered at the bottom of the column) → `Lazy`
 - A buffer-local `<LeftMouse>` mapping resolves the clicked row with
