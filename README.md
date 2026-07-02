@@ -37,7 +37,6 @@ Managed with [lazy.nvim](https://github.com/folke/lazy.nvim); each spec lives in
 | [conform.nvim](https://github.com/stevearc/conform.nvim)                        | Formatter runner (lua: stylua, markdown: deno fmt; formats on save).                              |
 | [mason.nvim](https://github.com/mason-org/mason.nvim)                           | Package manager for external tools; auto-installs the configured tools (stylua, deno) on startup. |
 | [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim)                     | Git add/change/delete signs in the gutter.                                                        |
-| [diffview.nvim](https://github.com/sindrets/diffview.nvim)                      | Git diffs and file history (`<leader>g*`).                                                        |
 | [edgy.nvim](https://github.com/folke/edgy.nvim)                                 | Docks the bottom panel (terminal, problems) with titles and fixed sizes.                          |
 | [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim)                   | Integrated terminal in the bottom panel (`` Ctrl+` ``).                                           |
 | [trouble.nvim](https://github.com/folke/trouble.nvim)                           | Problems panel listing diagnostics (`<leader>xx`).                                                |
