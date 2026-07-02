@@ -161,6 +161,28 @@ local function ensure_position()
   render()
 end
 
+-- The bar is not a place for the cursor (winfixbuf makes it a dead end for
+-- :edit and friends); when focus lands here, hop to a real window instead.
+local function leave_bar()
+  if vim.api.nvim_get_current_win() ~= state.win then
+    return
+  end
+  local fallback
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win ~= state.win and vim.api.nvim_win_get_config(win).focusable then
+      local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
+      if ft ~= "NvimTree" and ft ~= "toggleterm" and ft ~= "trouble" then
+        vim.api.nvim_set_current_win(win)
+        return
+      end
+      fallback = fallback or win
+    end
+  end
+  if fallback then
+    vim.api.nvim_set_current_win(fallback)
+  end
+end
+
 function M.open()
   if state.win and vim.api.nvim_win_is_valid(state.win) then
     return
@@ -245,6 +267,13 @@ function M.setup()
     group = group,
     callback = function()
       vim.schedule(render)
+    end,
+  })
+
+  vim.api.nvim_create_autocmd("WinEnter", {
+    group = group,
+    callback = function()
+      vim.schedule(leave_bar)
     end,
   })
 
