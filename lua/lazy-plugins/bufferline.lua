@@ -17,13 +17,6 @@ local function tree_padding()
   return 0
 end
 
--- bufferline/offset.lua's get_section_text() appends the "separator = true"
--- glyph below onto the rendered offset text, but its M.get() sizes
--- left_size/total_size from `win_width + padding` alone and never credits
--- that glyph. Without this, the offset's reported size trails the editor's
--- real start column by one. Compensate with one extra column of padding.
-local SEPARATOR_CREDIT = 1
-
 return {
   -- https://github.com/akinsho/bufferline.nvim
   "akinsho/bufferline.nvim",
@@ -59,13 +52,25 @@ return {
         end)
       end,
       -- Reserve the left side for the activity bar and nvim-tree instead of
-      -- drawing over them (see tree_padding above for why a single entry).
+      -- drawing over them. While the bar is open it is the leftmost window
+      -- and absorbs the tree's width via tree_padding; with the bar closed
+      -- the tree itself is leftmost and the NvimTree entry takes over. The
+      -- two entries never both match (bufferline only tests the layout row's
+      -- first/last windows, and the tree is a middle window when the bar is
+      -- open). The padding autocmd below writes offsets[1]; keep the
+      -- activitybar entry first.
       offsets = {
         {
           filetype = "activitybar",
           text = function()
             return tree_padding() > 0 and "File Explorer" or ""
           end,
+          text_align = "center",
+          separator = true,
+        },
+        {
+          filetype = "NvimTree",
+          text = "File Explorer",
           text_align = "center",
           separator = true,
         },
@@ -79,7 +84,10 @@ return {
     -- Keep the offset padding in sync with the tree window's presence/width.
     local function sync_padding()
       local offsets = require("bufferline.config").options.offsets
-      local pad = tree_padding() + SEPARATOR_CREDIT
+      -- left_size excludes the separator glyph, which renders over the
+      -- window-separator column; the rendered region ends at editor_col
+      -- and the metric reads editor_col - 1. Do not "compensate" for it.
+      local pad = tree_padding()
       if offsets and offsets[1] and offsets[1].padding ~= pad then
         offsets[1].padding = pad
         vim.cmd.redrawtabline()
