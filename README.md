@@ -43,7 +43,10 @@ Managed with [lazy.nvim](https://github.com/folke/lazy.nvim); each spec lives in
 | [dropbar.nvim](https://github.com/Bekaboo/dropbar.nvim)                         | VSCode-style breadcrumbs winbar (`<leader>;` to pick).                                            |
 
 A custom VSCode-style activity bar (icon column at the far left) lives in
-`lua/core/activitybar.lua`; toggle it with `:ActivityBar toggle`.
+`lua/core/activitybar.lua`; toggle it with `:ActivityBar toggle`. Its git button
+opens a Source Control sidebar (`lua/core/gitpanel.lua`, `:GitPanel toggle`)
+listing staged and unstaged changes; selecting a file diffs it against the index
+or `HEAD` with gitsigns.
 
 ## 참고
 
