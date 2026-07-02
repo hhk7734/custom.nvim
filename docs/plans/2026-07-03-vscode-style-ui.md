@@ -112,7 +112,7 @@ Expected: `exit: 0` with no error output.
 - [ ] **Step 3: Commit**
 
 ```bash
-git add lua/lazy-plugins/edgy.lua lazy-lock.json
+git add lua/lazy-plugins/edgy.lua
 git commit -m "feat(edgy): dock bottom panels with edgy.nvim"
 ```
 
@@ -168,7 +168,7 @@ If the keypress does nothing, apply the `<C-\>` fallback noted in Step 1.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add lua/lazy-plugins/toggleterm.lua lazy-lock.json
+git add lua/lazy-plugins/toggleterm.lua
 git commit -m "feat(toggleterm): add VSCode-style integrated terminal"
 ```
 
@@ -218,7 +218,7 @@ listing the diagnostic. `<leader>xx` again closes it. Undo the deliberate error.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add lua/lazy-plugins/trouble.lua lazy-lock.json
+git add lua/lazy-plugins/trouble.lua
 git commit -m "feat(trouble): add problems panel for diagnostics"
 ```
 
@@ -275,7 +275,7 @@ window (dropbar skips special buftypes by default).
 - [ ] **Step 4: Commit**
 
 ```bash
-git add lua/lazy-plugins/dropbar.lua lazy-lock.json
+git add lua/lazy-plugins/dropbar.lua
 git commit -m "feat(dropbar): add breadcrumbs winbar"
 ```
 
