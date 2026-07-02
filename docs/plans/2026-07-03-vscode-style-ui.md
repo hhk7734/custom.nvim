@@ -63,7 +63,7 @@ All user-visible requirements from the spec are unchanged.
 **Files:**
 - Create: `lua/lazy-plugins/edgy.lua`
 
-- [ ] **Step 1: Write the plugin spec**
+- [x] **Step 1: Write the plugin spec**
 
 ```lua
 return {
@@ -101,7 +101,7 @@ return {
 }
 ```
 
-- [ ] **Step 2: Install and verify the config loads**
+- [x] **Step 2: Install and verify the config loads**
 
 Run: `nvim --headless "+Lazy! sync" +qa 2>&1; echo "exit: $?"`
 Expected: lazy.nvim install output containing `edgy.nvim`, ending with `exit: 0`, no `Error` lines.
@@ -109,7 +109,7 @@ Expected: lazy.nvim install output containing `edgy.nvim`, ending with `exit: 0`
 Run: `nvim --headless '+lua require("edgy")' +qa 2>&1; echo "exit: $?"`
 Expected: `exit: 0` with no error output.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lua/lazy-plugins/edgy.lua
@@ -123,7 +123,7 @@ git commit -m "feat(edgy): dock bottom panels with edgy.nvim"
 **Files:**
 - Create: `lua/lazy-plugins/toggleterm.lua`
 
-- [ ] **Step 1: Write the plugin spec**
+- [x] **Step 1: Write the plugin spec**
 
 The spec asks for VSCode's `` Ctrl+` ``. The mapping is defined in lazy's
 `keys` (not toggleterm's `open_mapping`) so the plugin stays lazy-loaded until
@@ -151,7 +151,7 @@ return {
 }
 ```
 
-- [ ] **Step 2: Install and verify the terminal opens**
+- [x] **Step 2: Install and verify the terminal opens**
 
 Run: `nvim --headless "+Lazy! sync" +qa 2>&1; echo "exit: $?"`
 Expected: `exit: 0`, `toggleterm.nvim` installed.
@@ -165,7 +165,7 @@ Open `nvim`, press `` Ctrl+` ``: a terminal opens at the bottom, 12 lines tall,
 with an edgy "Terminal" title. Press `` Ctrl+` `` again inside it: it closes.
 If the keypress does nothing, apply the `<C-\>` fallback noted in Step 1.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lua/lazy-plugins/toggleterm.lua
@@ -179,7 +179,7 @@ git commit -m "feat(toggleterm): add VSCode-style integrated terminal"
 **Files:**
 - Create: `lua/lazy-plugins/trouble.lua`
 
-- [ ] **Step 1: Write the plugin spec**
+- [x] **Step 1: Write the plugin spec**
 
 ```lua
 return {
@@ -201,7 +201,7 @@ return {
 }
 ```
 
-- [ ] **Step 2: Install and verify the config loads**
+- [x] **Step 2: Install and verify the config loads**
 
 Run: `nvim --headless "+Lazy! sync" +qa 2>&1; echo "exit: $?"`
 Expected: `exit: 0`, `trouble.nvim` installed.
@@ -215,7 +215,7 @@ Open a Lua file with a deliberate error (e.g. add `local x =` on a line in a
 scratch file), press `<leader>xx`: a "Problems" panel opens at the bottom
 listing the diagnostic. `<leader>xx` again closes it. Undo the deliberate error.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lua/lazy-plugins/trouble.lua
@@ -229,7 +229,7 @@ git commit -m "feat(trouble): add problems panel for diagnostics"
 **Files:**
 - Create: `lua/lazy-plugins/dropbar.lua`
 
-- [ ] **Step 1: Write the plugin spec**
+- [x] **Step 1: Write the plugin spec**
 
 ```lua
 return {
@@ -257,7 +257,7 @@ return {
 }
 ```
 
-- [ ] **Step 2: Install and verify the config loads**
+- [x] **Step 2: Install and verify the config loads**
 
 Run: `nvim --headless "+Lazy! sync" +qa 2>&1; echo "exit: $?"`
 Expected: `exit: 0`, `dropbar.nvim` installed.
@@ -272,7 +272,7 @@ attaches) appears above the code. Click a crumb: a picker menu opens.
 `<leader>;` starts pick mode. The winbar must NOT appear on the nvim-tree
 window (dropbar skips special buftypes by default).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add lua/lazy-plugins/dropbar.lua
@@ -288,7 +288,7 @@ git commit -m "feat(dropbar): add breadcrumbs winbar"
 - Modify: `init.lua:12-15`
 - Modify: `lua/lazy-plugins/lualine.lua:9-11`
 
-- [ ] **Step 1: Write the module**
+- [x] **Step 1: Write the module**
 
 Create `lua/core/activitybar.lua` with exactly:
 
@@ -331,14 +331,14 @@ local entries = {
     end,
   },
   {
-    icon = "",
+    icon = "",
     desc = "Search",
     action = function()
       require("telescope.builtin").live_grep()
     end,
   },
   {
-    icon = "",
+    icon = "",
     desc = "Source Control",
     action = function()
       if win_with_ft("DiffviewFiles") then
@@ -352,7 +352,7 @@ local entries = {
     end,
   },
   {
-    icon = "",
+    icon = "",
     desc = "Terminal",
     action = function()
       vim.cmd("ToggleTerm")
@@ -372,7 +372,7 @@ local entries = {
     end,
   },
   {
-    icon = "",
+    icon = "",
     desc = "Plugins (Lazy)",
     action = function()
       vim.cmd("Lazy")
@@ -484,9 +484,16 @@ function M.open()
 end
 
 function M.close()
-  if state.win and vim.api.nvim_win_is_valid(state.win) then
-    vim.api.nvim_win_close(state.win, true)
+  if not (state.win and vim.api.nvim_win_is_valid(state.win)) then
+    state.win = nil
+    return
   end
+  -- Closing the last window of a tabpage is an error (E444); keep the bar.
+  local tab = vim.api.nvim_win_get_tabpage(state.win)
+  if #vim.api.nvim_tabpage_list_wins(tab) == 1 then
+    return
+  end
+  vim.api.nvim_win_close(state.win, true)
   state.win = nil
 end
 
@@ -544,7 +551,7 @@ end
 return M
 ```
 
-- [ ] **Step 2: Load it from init.lua**
+- [x] **Step 2: Load it from init.lua**
 
 In `init.lua`, change:
 
@@ -565,7 +572,7 @@ require("config.lazy")
 require("core.activitybar").setup()
 ```
 
-- [ ] **Step 3: Hide the statusline segment under the bar**
+- [x] **Step 3: Hide the statusline segment under the bar**
 
 In `lua/lazy-plugins/lualine.lua`, change:
 
@@ -587,12 +594,15 @@ to:
   },
 ```
 
-- [ ] **Step 4: Verify the bar opens at the far left**
+- [x] **Step 4: Verify the bar opens at the far left**
 
-Run: `nvim --headless '+lua for i, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do print(i, vim.bo[vim.api.nvim_win_get_buf(w)].filetype) end' +qa 2>&1`
+Chained `+cmd ... +qa` args run before `VimEnter`, so the bar (opened on
+`VimEnter`) would not exist yet; defer the check via an autocmd instead:
+
+Run: `nvim --headless -c 'autocmd VimEnter * lua vim.schedule(function() for i, w in ipairs(vim.api.nvim_tabpage_list_wins(0)) do print(i .. " " .. vim.bo[vim.api.nvim_win_get_buf(w)].filetype) end vim.cmd("qall!") end)' 2>&1`
 Expected output contains a line `1 activitybar` (the bar exists and is window 1).
 
-Run: `stylua --check lua/core/activitybar.lua; echo "exit: $?"`
+Run: `~/.local/share/nvim/mason/bin/stylua --check lua/core/activitybar.lua; echo "exit: $?"`
 Expected: `exit: 0`
 
 - [ ] **Step 5: Manual check (interactive)**
@@ -602,14 +612,14 @@ Open `nvim lua/core/opt.lua`:
 2. Click 󰉋: nvim-tree opens **to the right of the bar** (never left of it);
    the 󰉋 icon turns to the active highlight. Click again: tree closes,
    highlight reverts.
-3. Click : Telescope live_grep opens (Esc to close).
-4. Click : the terminal panel toggles and  gets the active highlight.
+3. Click : Telescope live_grep opens (Esc to close).
+4. Click : the terminal panel toggles and  gets the active highlight.
 5. Click 󰀪: the Problems panel toggles.
 6. Click the gear: Lazy UI opens (q to close).
 7. `:ActivityBar toggle` closes the bar; `:ActivityBar toggle` reopens it.
 8. Focus never moves to the bar when clicking (the cursor stays in your file).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lua/core/activitybar.lua init.lua lua/lazy-plugins/lualine.lua
@@ -623,7 +633,7 @@ git commit -m "feat(activitybar): add VSCode-style activity bar"
 **Files:**
 - Modify: `lua/lazy-plugins/bufferline.lua:38-46`
 
-- [ ] **Step 1: Add the offset**
+- [x] **Step 1: Add the offset**
 
 In `lua/lazy-plugins/bufferline.lua`, change:
 
@@ -664,15 +674,27 @@ Open `nvim lua/core/opt.lua`, then open the tree (click 󰉋): the first buffer
 tab starts exactly at the right edge of the tree, and the "File Explorer"
 title is centered over the tree — not shifted 3 columns left.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lua/lazy-plugins/bufferline.lua
 git commit -m "feat(bufferline): reserve offset for activity bar"
 ```
 
----
+**Execution note (2026-07-03):** review found that bufferline's offset matching
+only inspects the first and last windows of the top-level layout row, so the
+two-entry design above cannot reserve space for the tree (a middle window) —
+tabs rendered over it. Implemented instead (commits d495ec4/d596fd5): a single
+`activitybar` offsets entry whose `padding` is synced to the tree's width by a
+WinNew/WinClosed/WinResized autocmd (a `config` function calls setup, then
+syncs), `text` as a function showing "File Explorer" while the tree is open,
+plus a fallback `NvimTree` entry that matches only when the bar is closed
+(bufferline never matches both, since the tree is a middle window while the bar
+is open). A width guard was also added to `render()` in
+`lua/core/activitybar.lua` (commit 0732167) because `winfixwidth` is not
+honored when adjacent windows close.
 
+---
 ### Task 7: nvim-tree last-window logic ignores the activity bar
 
 **Files:**
