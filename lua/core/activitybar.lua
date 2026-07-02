@@ -91,6 +91,11 @@ local function render()
     return
   end
 
+  -- winfixwidth is not always honored when adjacent windows close; re-assert.
+  if vim.api.nvim_win_get_width(state.win) ~= WIDTH then
+    vim.api.nvim_win_set_width(state.win, WIDTH)
+  end
+
   local top, bottom = {}, {}
   for _, e in ipairs(entries) do
     table.insert(e.bottom and bottom or top, e)
