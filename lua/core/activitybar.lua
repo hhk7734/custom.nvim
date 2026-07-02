@@ -140,10 +140,16 @@ local function render()
 end
 
 -- Global <LeftMouse> expr mapping: handle clicks on the bar without moving
--- focus; every other click keeps its default behavior.
+-- focus; every other click keeps its default behavior. Clicks on the git
+-- panel are routed from here too — a buffer-local mapping in the panel
+-- would shadow this one while the panel has focus, swallowing bar clicks.
 local function on_click()
   local pos = vim.fn.getmousepos()
   if pos.winid ~= state.win then
+    local gitpanel = package.loaded["core.gitpanel"]
+    if gitpanel and gitpanel.click(pos) then
+      return ""
+    end
     return "<LeftMouse>"
   end
   local entry = state.lines[pos.line]

@@ -245,23 +245,35 @@ local function select_entry(entry)
 end
 
 local function select_current()
-  local lnum = vim.api.nvim_win_get_cursor(0)[1]
+  local lnum = vim.api.nvim_win_get_cursor(state.win)[1]
   local entry = state.lines[lnum]
   if entry ~= "header" then
     select_entry(entry)
   end
 end
 
--- Buffer-local mapping: unlike an unmapped <LeftMouse>, a mapped one does not
--- get Vim's automatic click-to-cursor behavior, so getmousepos() positions
--- the cursor by hand (same trick as activitybar.lua's on_click).
-local function on_click()
-  local pos = vim.fn.getmousepos()
-  if pos.winid ~= state.win or pos.line == 0 then
-    return
+-- Routed here by activitybar's global <LeftMouse> dispatcher. A buffer-local
+-- mapping would shadow that dispatcher while the panel has focus, swallowing
+-- clicks on the rest of the UI. Returns true when the click belongs to the
+-- panel; the work itself is scheduled out of the expr-mapping context.
+function M.click(pos)
+  if not (state.win and vim.api.nvim_win_is_valid(state.win)) or pos.winid ~= state.win then
+    return false
   end
-  vim.api.nvim_win_set_cursor(state.win, { pos.line, 0 })
-  select_current()
+  vim.schedule(function()
+    if not (state.win and vim.api.nvim_win_is_valid(state.win)) or pos.line == 0 then
+      return
+    end
+    vim.api.nvim_win_set_cursor(state.win, { pos.line, 0 })
+    local entry = state.lines[pos.line]
+    if entry and entry ~= "header" then
+      select_entry(entry)
+    else
+      -- Blank/header row: just focus the panel for keyboard navigation.
+      vim.api.nvim_set_current_win(state.win)
+    end
+  end)
+  return true
 end
 
 local function setup_buffer()
@@ -272,7 +284,6 @@ local function setup_buffer()
 
   local opts = { buffer = state.buf, silent = true, nowait = true }
   vim.keymap.set("n", "<CR>", select_current, vim.tbl_extend("force", opts, { desc = "git panel: select" }))
-  vim.keymap.set("n", "<LeftMouse>", on_click, vim.tbl_extend("force", opts, { desc = "git panel: select" }))
   vim.keymap.set("n", "q", M.close, vim.tbl_extend("force", opts, { desc = "git panel: close" }))
   vim.keymap.set("n", "R", render, vim.tbl_extend("force", opts, { desc = "git panel: refresh" }))
 end
