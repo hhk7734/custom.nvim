@@ -35,6 +35,8 @@ local entries = {
     icon = "󰉋",
     desc = "Explorer",
     action = function()
+      -- One sidebar occupant at a time, as in VSCode.
+      require("core.gitpanel").close()
       require("nvim-tree.api").tree.toggle()
     end,
     is_active = function()
@@ -52,14 +54,10 @@ local entries = {
     icon = "",
     desc = "Source Control",
     action = function()
-      if win_with_ft("DiffviewFiles") then
-        vim.cmd("DiffviewClose")
-      else
-        vim.cmd("DiffviewOpen")
-      end
+      require("core.gitpanel").toggle()
     end,
     is_active = function()
-      return win_with_ft("DiffviewFiles")
+      return win_with_ft("gitpanel")
     end,
   },
   {
@@ -182,7 +180,7 @@ local function leave_bar()
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if win ~= state.win and vim.api.nvim_win_get_config(win).focusable then
       local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
-      if ft ~= "NvimTree" and ft ~= "toggleterm" and ft ~= "trouble" then
+      if ft ~= "NvimTree" and ft ~= "gitpanel" and ft ~= "toggleterm" and ft ~= "trouble" then
         vim.api.nvim_set_current_win(win)
         return
       end
