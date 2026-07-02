@@ -3,7 +3,13 @@
 -- rely on plugin commands and lazy-loading via require().
 local M = {}
 
-local WIDTH = 3
+-- Button geometry: each entry renders as a BUTTON_ROWS-tall, WIDTH-wide
+-- clickable block with its icon on the middle row. Terminal cells cannot
+-- scale glyphs (the icon's pixel size comes from the terminal font); a
+-- taller and wider hit area is the terminal analogue of VSCode's square
+-- activity-bar buttons.
+local WIDTH = 5
+local BUTTON_ROWS = 3
 local ns = vim.api.nvim_create_namespace("activitybar")
 
 local state = {
@@ -103,18 +109,23 @@ local function render()
 
   local lines = {}
   state.lines = {}
+  local icon_row = math.floor((BUTTON_ROWS - 1) / 2) + 1
+  local function add_button(e)
+    for row = 1, BUTTON_ROWS do
+      table.insert(lines, row == icon_row and ("  " .. e.icon) or "")
+      state.lines[#lines] = e
+    end
+  end
   for _, e in ipairs(top) do
-    table.insert(lines, " " .. e.icon)
-    state.lines[#lines] = e
+    add_button(e)
   end
   -- Pad so that `bottom` entries stick to the bottom of the window.
   local height = vim.api.nvim_win_get_height(state.win)
-  while #lines < height - #bottom do
+  while #lines < height - #bottom * BUTTON_ROWS do
     table.insert(lines, "")
   end
   for _, e in ipairs(bottom) do
-    table.insert(lines, " " .. e.icon)
-    state.lines[#lines] = e
+    add_button(e)
   end
 
   vim.bo[state.buf].modifiable = true
