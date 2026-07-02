@@ -707,7 +707,7 @@ BufEnter branch's toggle dance also assumed the tree was the very last window,
 which is no longer true; it is replaced by explicitly reopening the alternate
 buffer in a main window.
 
-- [ ] **Step 1: Replace the autocmd**
+- [x] **Step 1: Replace the autocmd**
 
 In `lua/lazy-plugins/nvim-tree.lua`, replace the whole block:
 
@@ -805,7 +805,7 @@ with:
    a main window reopens showing `opt.lua` next to the tree (nvim does not get
    stuck on tree + bar only).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add lua/lazy-plugins/nvim-tree.lua
@@ -819,7 +819,7 @@ git commit -m "refactor(nvim-tree): account for activity bar in last-window logi
 **Files:**
 - Modify: `README.md:25-40`
 
-- [ ] **Step 1: Document the new plugins**
+- [x] **Step 1: Document the new plugins**
 
 In `README.md`, append these rows to the plugin table (after the diffview row):
 
@@ -837,7 +837,7 @@ A custom VSCode-style activity bar (icon column at the far left) lives in
 `lua/core/activitybar.lua`; toggle it with `:ActivityBar toggle`.
 ```
 
-- [ ] **Step 2: Format and full headless check**
+- [x] **Step 2: Format and full headless check**
 
 Run: `deno fmt README.md && stylua lua/ init.lua && git diff --stat`
 Expected: only formatting-consistent output; no unexpected file churn.
@@ -855,9 +855,22 @@ With `nvim lua/core/opt.lua`:
 - Breadcrumbs above code; `<leader>;` picks; no winbar on tree/terminal/problems/bar.
 - `:q` in the last file window (tree open) exits nvim.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md
 git commit -m "docs: document VSCode-style UI plugins in README"
 ```
+
+## Post-plan changes during execution
+
+- Commit 44ba27f: focus landing in the bar (winfixbuf) made `:edit` fail with
+  E1513 after window closes; a scheduled WinEnter hop moves focus to a real
+  window.
+- Commit adeceee: the focus hop fires an extra BufEnter, double-running the
+  nvim-tree last-window recovery; the recovery re-checks `realWinCount() ~= 1`
+  inside its defer and runs at most once.
+- Commit 6232c7e (user request): buttons enlarged to 3-row-tall blocks on a
+  5-column bar (`WIDTH = 5`, `BUTTON_ROWS = 3` in `lua/core/activitybar.lua`);
+  every row of a button is click-mapped. The Task 5 code block above still
+  shows the original 1-row/3-column render.
