@@ -51,6 +51,18 @@ return {
     end
     vim.keymap.set("n", "<C-Left>", nvimTreeFocusOrToggle, { desc = "focus nvim-tree" })
 
+    -- Real windows exclude e.g. incline status windows and the activity bar.
+    local function realWinCount()
+      local count = 0
+      for _, winId in ipairs(vim.api.nvim_list_wins()) do
+        local ft = vim.bo[vim.api.nvim_win_get_buf(winId)].filetype
+        if vim.api.nvim_win_get_config(winId).focusable and ft ~= "activitybar" then
+          count = count + 1
+        end
+      end
+      return count
+    end
+
     -- close vim if nvim-tree is the last window
     vim.api.nvim_create_autocmd({ "BufEnter", "QuitPre" }, {
       nested = false,
@@ -62,15 +74,7 @@ return {
           return
         end
 
-        -- How many "real" windows do we have? (excluding e.g. incline status
-        -- window and the activity bar)
-        local winCount = 0
-        for _, winId in ipairs(vim.api.nvim_list_wins()) do
-          local ft = vim.bo[vim.api.nvim_win_get_buf(winId)].filetype
-          if vim.api.nvim_win_get_config(winId).focusable and ft ~= "activitybar" then
-            winCount = winCount + 1
-          end
-        end
+        local winCount = realWinCount()
 
         -- We want to quit and only one window besides tree is left
         if e.event == "QuitPre" and winCount == 2 then
@@ -81,6 +85,11 @@ return {
         -- last file window): reopen the alternate buffer in a main window.
         if e.event == "BufEnter" and winCount == 1 then
           vim.defer_fn(function()
+            -- A scheduled focus hop can fire BufEnter again while the tree is
+            -- still the only real window; only the first recovery may run.
+            if realWinCount() ~= 1 then
+              return
+            end
             vim.cmd("botright vsplit")
             local alt = vim.fn.bufnr("#")
             if alt > 0 and vim.fn.buflisted(alt) == 1 then
