@@ -39,23 +39,32 @@ local function repo_root()
   return out[1]
 end
 
--- Parses `git status --porcelain` into Staged (index status `M A D R C T`)
+-- Parses `git status --porcelain -z` into Staged (index status `M A D R C T`)
 -- and Changes (worktree status not a space, plus untracked `??`) lists.
+-- NUL-delimited output is used because git emits it unquoted: with plain
+-- --porcelain, paths with spaces or non-ASCII arrive quoted/octal-escaped
+-- ('"a b.txt"') and would render (and open) with the quotes verbatim.
+-- vim.system (not vim.fn.system) because Vimscript strings cannot hold NUL:
+-- vim.fn.system would replace the delimiters with SOH bytes.
 local function git_status(root)
-  local out = vim.fn.systemlist({ "git", "-C", root, "status", "--porcelain" })
-  if vim.v.shell_error ~= 0 then
+  local res = vim.system({ "git", "-C", root, "status", "--porcelain", "-z" }):wait()
+  if res.code ~= 0 or not res.stdout then
     return {}, {}
   end
 
   local staged, changes = {}, {}
-  for _, line in ipairs(out) do
-    if #line >= 4 then
-      local x, y = line:sub(1, 1), line:sub(2, 2)
-      local path = line:sub(4)
-      -- Renames/copies report "old -> new"; keep the new path.
-      local arrow = path:find(" -> ", 1, true)
-      if arrow then
-        path = path:sub(arrow + 4)
+  local records = vim.split(res.stdout, "\0", { plain = true, trimempty = true })
+  local i = 1
+  while i <= #records do
+    local rec = records[i]
+    i = i + 1
+    if #rec >= 4 then
+      local x, y = rec:sub(1, 1), rec:sub(2, 2)
+      local path = rec:sub(4)
+      -- Renames/copies put the old path in a separate NUL field right after
+      -- the record; the record's own path is already the new one. Skip it.
+      if x == "R" or x == "C" or y == "R" or y == "C" then
+        i = i + 1
       end
 
       if x == "?" and y == "?" then
