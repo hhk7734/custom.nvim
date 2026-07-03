@@ -4,8 +4,14 @@
 -- module structure (state table, local helpers, M.open/close/toggle/setup).
 local M = {}
 
-local HEIGHT = 12
 local ns = vim.api.nvim_create_namespace("panel")
+
+-- Default height: proportional like VSCode (30% of the screen), never
+-- smaller than 12 rows. Recomputed on every open; winfixheight still lets a
+-- manual resize stick while the panel stays open.
+local function panel_height()
+  return math.max(12, math.floor(vim.o.lines * 0.3))
+end
 
 -- Ordered tab list; minwid in the winbar click regions is the index here
 -- (3 = the ✕ button).
@@ -223,7 +229,7 @@ function M.open(key)
   -- Full-width bottom split; the activity bar's ensure_layout autocmds pull
   -- the bar/sidebar back into full-height columns, leaving the panel under
   -- the editor area only (same dance it did with edgy's "wincmd J").
-  vim.cmd("botright " .. HEIGHT .. "split")
+  vim.cmd("botright " .. panel_height() .. "split")
   state.win = vim.api.nvim_get_current_win()
 
   local wo = vim.wo[state.win]
