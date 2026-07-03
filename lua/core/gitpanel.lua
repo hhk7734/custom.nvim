@@ -192,7 +192,7 @@ end
 
 -- First window that isn't a sidebar/panel occupant; nil if none exist.
 local function main_win()
-  local exclude = { activitybar = true, gitpanel = true, NvimTree = true, toggleterm = true, trouble = true }
+  local exclude = { activitybar = true, gitpanel = true, NvimTree = true, panelterminal = true, panelproblems = true }
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if not exclude[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
       return win
