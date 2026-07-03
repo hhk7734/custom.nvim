@@ -163,16 +163,73 @@ local function on_click()
   return ""
 end
 
--- Re-assert the far-left position after windows that also open "topleft"
--- (e.g. nvim-tree) push the bar inward.
-local function ensure_position()
+-- Sidebar occupants that must stay a full-height column beside the bar; the
+-- bottom panel then only spans the editor area, as in VSCode.
+local SIDEBAR_FTS = { NvimTree = true, gitpanel = true }
+
+-- First non-floating sidebar window in the current tabpage, or nil.
+local function sidebar_win()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if
+      SIDEBAR_FTS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype]
+      and vim.api.nvim_win_get_config(win).relative == ""
+    then
+      return win
+    end
+  end
+  return nil
+end
+
+-- true if the window is a full-height column: its leaf is a direct child of
+-- the top-level row (nothing stacked above or below it). Height comparisons
+-- cannot detect the broken state — when edgy's bottom window goes full-width
+-- it squashes the bar and sidebar equally, so they still match each other.
+local function is_column(win)
+  local root = vim.fn.winlayout()
+  if root[1] ~= "row" then
+    return false
+  end
+  for _, frame in ipairs(root[2]) do
+    if frame[1] == "leaf" and frame[2] == win then
+      return true
+    end
+  end
+  return false
+end
+
+-- Re-assert the layout: bar leftmost at WIDTH, sidebar a full-height column
+-- right of it. Both are forced out of shape by windows that open "topleft"
+-- (nvim-tree) or full-width at the bottom (edgy runs "wincmd J" on its panel
+-- windows whenever its views change). Acts only when the layout is wrong:
+-- "wincmd H" fires WinResized, which re-triggers this handler, so the guard
+-- is what prevents a feedback loop.
+local function ensure_layout()
   if not (state.win and vim.api.nvim_win_is_valid(state.win)) then
+    render()
     return
   end
-  vim.api.nvim_win_call(state.win, function()
-    vim.cmd("wincmd H")
-    vim.cmd("vertical resize " .. WIDTH)
-  end)
+
+  local sidebar = sidebar_win()
+  local bar_ok = is_column(state.win)
+    and vim.api.nvim_win_get_position(state.win)[2] == 0
+    and vim.api.nvim_win_get_width(state.win) == WIDTH
+  local sidebar_ok = not sidebar or (is_column(sidebar) and vim.api.nvim_win_get_position(sidebar)[2] == WIDTH + 1)
+
+  if not (bar_ok and sidebar_ok) then
+    if sidebar then
+      -- wincmd H makes it a full-height leftmost column but drops its width.
+      local width = vim.api.nvim_win_get_width(sidebar)
+      vim.api.nvim_win_call(sidebar, function()
+        vim.cmd("wincmd H")
+      end)
+      vim.api.nvim_win_set_width(sidebar, width)
+    end
+    vim.api.nvim_win_call(state.win, function()
+      vim.cmd("wincmd H")
+      vim.cmd("vertical resize " .. WIDTH)
+    end)
+  end
+
   render()
 end
 
@@ -264,24 +321,26 @@ function M.setup()
     group = group,
     callback = function()
       M.open()
-      ensure_position()
+      ensure_layout()
     end,
   })
 
-  -- nvim-tree also opens "topleft"; keep the bar at the far left.
+  -- nvim-tree opens "topleft"; the panel views make edgy force its bottom
+  -- windows full-width. Both disturb the managed columns.
   vim.api.nvim_create_autocmd("FileType", {
     group = group,
-    pattern = "NvimTree",
+    pattern = { "NvimTree", "toggleterm", "trouble" },
     callback = function()
-      vim.schedule(ensure_position)
+      vim.schedule(ensure_layout)
     end,
   })
 
-  -- Track open views for the active-icon highlight and bottom padding.
+  -- Track open views for the active-icon highlight and bottom padding, and
+  -- heal the column layout (ensure_layout ends with render()).
   vim.api.nvim_create_autocmd({ "WinEnter", "WinClosed", "WinResized", "TermOpen", "TermClose" }, {
     group = group,
     callback = function()
-      vim.schedule(render)
+      vim.schedule(ensure_layout)
     end,
   })
 
