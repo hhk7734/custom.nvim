@@ -61,26 +61,6 @@ local entries = {
     end,
   },
   {
-    icon = "",
-    desc = "Terminal",
-    action = function()
-      vim.cmd("ToggleTerm")
-    end,
-    is_active = function()
-      return win_with_ft("toggleterm")
-    end,
-  },
-  {
-    icon = "󰀪",
-    desc = "Problems",
-    action = function()
-      vim.cmd("Trouble diagnostics toggle")
-    end,
-    is_active = function()
-      return win_with_ft("trouble")
-    end,
-  },
-  {
     icon = "",
     desc = "Plugins (Lazy)",
     action = function()
@@ -150,6 +130,10 @@ local function on_click()
     if gitpanel and gitpanel.click(pos) then
       return ""
     end
+    local panel = package.loaded["core.panel"]
+    if panel and panel.click(pos) then
+      return ""
+    end
     return "<LeftMouse>"
   end
   local entry = state.lines[pos.line]
@@ -182,8 +166,8 @@ end
 
 -- true if the window is a full-height column: its leaf is a direct child of
 -- the top-level row (nothing stacked above or below it). Height comparisons
--- cannot detect the broken state — when edgy's bottom window goes full-width
--- it squashes the bar and sidebar equally, so they still match each other.
+-- cannot detect the broken state — a full-width bottom window squashes the
+-- bar and sidebar equally, so they would still match each other.
 local function is_column(win)
   local root = vim.fn.winlayout()
   if root[1] ~= "row" then
@@ -199,10 +183,9 @@ end
 
 -- Re-assert the layout: bar leftmost at WIDTH, sidebar a full-height column
 -- right of it. Both are forced out of shape by windows that open "topleft"
--- (nvim-tree) or full-width at the bottom (edgy runs "wincmd J" on its panel
--- windows whenever its views change). Acts only when the layout is wrong:
--- "wincmd H" fires WinResized, which re-triggers this handler, so the guard
--- is what prevents a feedback loop.
+-- (nvim-tree) or full-width at the bottom (the panel opens "botright").
+-- Acts only when the layout is wrong: "wincmd H" fires WinResized, which
+-- re-triggers this handler, so the guard is what prevents a feedback loop.
 local function ensure_layout()
   if not (state.win and vim.api.nvim_win_is_valid(state.win)) then
     render()
@@ -243,7 +226,7 @@ local function leave_bar()
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if win ~= state.win and vim.api.nvim_win_get_config(win).focusable then
       local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
-      if ft ~= "NvimTree" and ft ~= "gitpanel" and ft ~= "toggleterm" and ft ~= "trouble" then
+      if ft ~= "NvimTree" and ft ~= "gitpanel" and ft ~= "panelterminal" and ft ~= "panelproblems" then
         vim.api.nvim_set_current_win(win)
         return
       end
@@ -325,11 +308,11 @@ function M.setup()
     end,
   })
 
-  -- nvim-tree opens "topleft"; the panel views make edgy force its bottom
-  -- windows full-width. Both disturb the managed columns.
+  -- nvim-tree opens "topleft" and the bottom panel opens "botright" full
+  -- width; both disturb the managed columns.
   vim.api.nvim_create_autocmd("FileType", {
     group = group,
-    pattern = { "NvimTree", "toggleterm", "trouble" },
+    pattern = { "NvimTree", "panelterminal", "panelproblems" },
     callback = function()
       vim.schedule(ensure_layout)
     end,
