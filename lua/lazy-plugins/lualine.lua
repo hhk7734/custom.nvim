@@ -7,7 +7,8 @@ return {
   dependencies = { "nvim-tree/nvim-web-devicons" },
 
   opts = {
-    theme = "palenight",
+    -- Follow the active colorscheme (github-theme ships a lualine palette).
+    theme = "auto",
     options = {
       -- The activity bar is a narrow icon strip; no statusline under it.
       disabled_filetypes = { statusline = { "activitybar" } },
