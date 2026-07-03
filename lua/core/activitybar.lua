@@ -151,17 +151,62 @@ end
 -- bottom panel then only spans the editor area, as in VSCode.
 local SIDEBAR_FTS = { NvimTree = true, gitpanel = true }
 
--- First non-floating sidebar window in the current tabpage, or nil.
-local function sidebar_win()
+-- All non-floating sidebar windows in the current tabpage, ordered by
+-- screen row (gitpanel stacks section windows in one column).
+local function sidebar_wins()
+  local wins = {}
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     if
       SIDEBAR_FTS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype]
       and vim.api.nvim_win_get_config(win).relative == ""
     then
-      return win
+      wins[#wins + 1] = win
     end
   end
-  return nil
+  table.sort(wins, function(a, b)
+    return vim.api.nvim_win_get_position(a)[1] < vim.api.nvim_win_get_position(b)[1]
+  end)
+  return wins
+end
+
+-- Leaf windows of a winlayout frame, in order.
+local function frame_leaves(frame, acc)
+  acc = acc or {}
+  if frame[1] == "leaf" then
+    acc[#acc + 1] = frame[2]
+  else
+    for _, child in ipairs(frame[2]) do
+      frame_leaves(child, acc)
+    end
+  end
+  return acc
+end
+
+-- true if the given windows form one full-height sidebar frame: a direct
+-- child of the top-level row that is a leaf (single window) or a "col"
+-- containing exactly these windows and nothing else.
+local function is_sidebar_frame(wins)
+  local root = vim.fn.winlayout()
+  if root[1] ~= "row" then
+    return false
+  end
+  local want = {}
+  for _, w in ipairs(wins) do
+    want[w] = true
+  end
+  for _, frame in ipairs(root[2]) do
+    local leaves = frame_leaves(frame)
+    local all = #leaves == #wins
+    for _, w in ipairs(leaves) do
+      if not want[w] then
+        all = false
+      end
+    end
+    if all then
+      return true
+    end
+  end
+  return false
 end
 
 -- true if the window is a full-height column: its leaf is a direct child of
@@ -192,20 +237,38 @@ local function ensure_layout()
     return
   end
 
-  local sidebar = sidebar_win()
+  local sidebar = sidebar_wins()
   local bar_ok = is_column(state.win)
     and vim.api.nvim_win_get_position(state.win)[2] == 0
     and vim.api.nvim_win_get_width(state.win) == WIDTH
-  local sidebar_ok = not sidebar or (is_column(sidebar) and vim.api.nvim_win_get_position(sidebar)[2] == WIDTH + 1)
+  local sidebar_ok = #sidebar == 0
+    or (is_sidebar_frame(sidebar) and vim.api.nvim_win_get_position(sidebar[1])[2] == WIDTH + 1)
 
   if not (bar_ok and sidebar_ok) then
-    if sidebar then
-      -- wincmd H makes it a full-height leftmost column but drops its width.
-      local width = vim.api.nvim_win_get_width(sidebar)
-      vim.api.nvim_win_call(sidebar, function()
+    if #sidebar > 0 then
+      -- Rebuild the sidebar as one full-height column: lead window first,
+      -- remaining section windows re-stacked beneath it, preserving the
+      -- sections' height ratio across the rebuild.
+      local width = vim.api.nvim_win_get_width(sidebar[1])
+      local heights, old_total = {}, 0
+      for i, w in ipairs(sidebar) do
+        heights[i] = vim.api.nvim_win_get_height(w)
+        old_total = old_total + heights[i]
+      end
+      vim.api.nvim_win_call(sidebar[1], function()
         vim.cmd("wincmd H")
       end)
-      vim.api.nvim_win_set_width(sidebar, width)
+      for i = 2, #sidebar do
+        pcall(vim.fn.win_splitmove, sidebar[i], sidebar[i - 1], { vertical = false, rightbelow = true })
+      end
+      vim.api.nvim_win_set_width(sidebar[1], width)
+      local new_total = 0
+      for _, w in ipairs(sidebar) do
+        new_total = new_total + vim.api.nvim_win_get_height(w)
+      end
+      for i = 1, #sidebar - 1 do
+        pcall(vim.api.nvim_win_set_height, sidebar[i], math.max(1, math.floor(new_total * heights[i] / old_total)))
+      end
     end
     vim.api.nvim_win_call(state.win, function()
       vim.cmd("wincmd H")
