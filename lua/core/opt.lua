@@ -30,3 +30,6 @@ opt.autochdir = true
 opt.number = true
 opt.numberwidth = 2
 opt.ruler = false
+
+-- Keep text stable when panels open/close at the bottom.
+opt.splitkeep = "screen"
