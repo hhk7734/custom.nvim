@@ -42,11 +42,54 @@ Managed with [lazy.nvim](https://github.com/folke/lazy.nvim); each spec lives in
 | [trouble.nvim](https://github.com/folke/trouble.nvim)                           | Problems panel listing diagnostics (`<leader>xx`).                                                |
 | [dropbar.nvim](https://github.com/Bekaboo/dropbar.nvim)                         | VSCode-style breadcrumbs winbar (`<leader>;` to pick).                                            |
 
-A custom VSCode-style activity bar (icon column at the far left) lives in
-`lua/core/activitybar.lua`; toggle it with `:ActivityBar toggle`. Its git button
-opens a Source Control sidebar (`lua/core/gitpanel.lua`, `:GitPanel toggle`)
-listing staged and unstaged changes; selecting a file diffs it against the index
-or `HEAD` with gitsigns.
+## Layout
+
+A VSCode-style layout. The activity bar and the Source Control panel are custom
+modules in `lua/core/`; the other regions come from the plugins above.
+
+```text
+┌─────┬──────────────────────────────┬──────────────────────────────────────────────────────────────────┐
+│     │ sidebar title                │ bufferline (buffer tabs)                                         │
+│  a  ├──────────────────────────────┼──────────────────────────────────────────────────────────────────┤
+│     │                              │ dropbar (breadcrumbs)                                            │
+│  c  │                              │                                                                  │
+│     │                              │                                                                  │
+│  t  │  nvim-tree /                 │                                                                  │
+│     │  gitpanel                    │                                                                  │
+│  i  │                              │  editor                                                          │
+│     │                              │                                                                  │
+│  v  │                              │                                                                  │
+│     │                              │                                                                  │
+│  i  │                              │                                                                  │
+│     │                              │                                                                  │
+│  t  │                              │                                                                  │
+│     │                              │                                                                  │
+│  y  │                              │                                                                  │
+│     │                              ├──────────────────────────────────────────────────────────────────┤
+│     │                              │  bottom panel:                                                   │
+│ bar │                              │  toggleterm / trouble (edgy)                                     │
+│     │                              │                                                                  │
+│     │                              │                                                                  │
+│     │                              │                                                                  │
+│     │                              │                                                                  │
+├─────┴──────────────────────────────┴──────────────────────────────────────────────────────────────────┤
+│ lualine (statusline)                                                                                  │
+└───────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+- **Activity bar** (`lua/core/activitybar.lua`, `:ActivityBar toggle`): icon
+  column at the far left. Buttons: Explorer (nvim-tree), Search (telescope live
+  grep), Source Control (gitpanel), Terminal (toggleterm), Problems (trouble),
+  and Plugins (Lazy) at the bottom.
+- **Sidebar**: one occupant at a time, as in VSCode — the nvim-tree file
+  explorer or the Source Control panel (`lua/core/gitpanel.lua`,
+  `:GitPanel toggle`) listing staged and unstaged changes; selecting a file
+  diffs it against the index or `HEAD` with gitsigns. The bufferline shows a
+  centered title over the sidebar.
+- **Bottom panel**: edgy docks the integrated terminal (`` Ctrl+` ``) and the
+  Problems list; it sits under the editor, and widens to everything right of the
+  activity bar when no sidebar is open.
+- **Editor**: bufferline tabs on top, dropbar breadcrumbs in the winbar.
 
 ## 참고
 
