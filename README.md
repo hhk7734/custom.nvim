@@ -24,8 +24,8 @@ Managed with [lazy.nvim](https://github.com/folke/lazy.nvim); each spec lives in
 
 | Plugin                                                                          | Description                                                                                       |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| [tokyonight.nvim](https://github.com/folke/tokyonight.nvim)                     | Colorscheme (Tokyo Night, storm variant).                                                         |
-| [lualine.nvim](https://github.com/nvim-lualine/lualine.nvim)                    | Statusline (palenight theme).                                                                     |
+| [github-nvim-theme](https://github.com/projekt0n/github-nvim-theme)             | Colorscheme (GitHub Dark Default).                                                                |
+| [lualine.nvim](https://github.com/nvim-lualine/lualine.nvim)                    | Statusline (theme follows the colorscheme).                                                       |
 | [bufferline.nvim](https://github.com/akinsho/bufferline.nvim)                   | Shows open buffers as tabs; double-click a tab to toggle pin.                                     |
 | [indent-blankline.nvim](https://github.com/lukas-reineke/indent-blankline.nvim) | Indentation guide lines.                                                                          |
 | [nvim-tree.lua](https://github.com/nvim-tree/nvim-tree.lua)                     | File explorer sidebar.                                                                            |
