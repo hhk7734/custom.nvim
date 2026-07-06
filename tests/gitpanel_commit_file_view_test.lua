@@ -88,6 +88,7 @@ for _, win in ipairs(vim.api.nvim_list_wins()) do
   end
 end
 assert(commits_win, "commits window exists")
+local sidebar_width = vim.api.nvim_win_get_width(commits_win)
 
 vim.api.nvim_set_current_win(commits_win)
 vim.api.nvim_win_set_cursor(commits_win, { 1, 0 })
@@ -121,6 +122,10 @@ local clicked_diff = vim.wait(1000, function()
   return #diff_windows() == 2
 end, 20)
 assert(clicked_diff, "clicking a changed commit file should open a side-by-side diff")
+assert(
+  vim.api.nvim_win_get_width(commits_win) == sidebar_width,
+  "sidebar width changed after first commit diff selection"
+)
 
 gitpanel.click({ winid = commits_win, winrow = second_line + 1, line = second_line })
 local replaced_diff = vim.wait(1000, function()
@@ -133,3 +138,7 @@ local replaced_diff = vim.wait(1000, function()
   return vim.deep_equal(left, { "old-second" }) and vim.deep_equal(right, { "new-second" })
 end, 20)
 assert(replaced_diff, "selecting another commit file should replace the existing two-pane diff")
+assert(
+  vim.api.nvim_win_get_width(commits_win) == sidebar_width,
+  "sidebar width changed after replacing commit diff selection"
+)

@@ -92,6 +92,7 @@ for _, win in ipairs(vim.api.nvim_list_wins()) do
   end
 end
 assert(changes_win, "changes window exists")
+local sidebar_width = vim.api.nvim_win_get_width(changes_win)
 
 local changes_buf = vim.api.nvim_win_get_buf(changes_win)
 local rendered_changes = vim.api.nvim_buf_get_lines(changes_buf, 0, -1, false)
@@ -127,6 +128,7 @@ local clicked_diff = vim.wait(1000, function()
   return #wins == 2
 end, 20)
 assert(clicked_diff, "single-clicking a changed file should open a side-by-side diff")
+assert(vim.api.nvim_win_get_width(changes_win) == sidebar_width, "sidebar width changed after first diff selection")
 
 gitpanel.click({ winid = changes_win, winrow = second_line + 1, line = second_line })
 local replaced_diff = vim.wait(1000, function()
@@ -139,3 +141,4 @@ local replaced_diff = vim.wait(1000, function()
   return vim.deep_equal(left, { "old-second" }) and vim.deep_equal(right, { "new-second" })
 end, 20)
 assert(replaced_diff, "selecting another changed file should replace the existing two-pane diff")
+assert(vim.api.nvim_win_get_width(changes_win) == sidebar_width, "sidebar width changed after replacing diff selection")

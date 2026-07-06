@@ -475,18 +475,26 @@ local function is_gitpanel_diff_view(name)
     or vim.startswith(name, "gitpanel://commit-updated/")
 end
 
--- Wipes the previous selection's diff views before opening another selection.
--- `diffoff!` clears diff state, but does not remove the old right-hand scratch
--- window; close those scratch windows so the next selection still owns exactly
--- two editor panes.
-local function close_diffs()
+-- Wipes previous diff state before opening another selection. When `keep_one`
+-- is true, one existing GitPanel diff scratch window is reused as the next main
+-- editor window, so closing stale panes cannot make the sidebar absorb the
+-- whole editor area.
+local function close_diffs(keep_one)
   pcall(vim.cmd, "diffoff!")
+  local keep_win = nil
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
-    if vim.startswith(name, "gitsigns://") or is_gitpanel_diff_view(name) then
+    if vim.startswith(name, "gitsigns://") then
       pcall(vim.api.nvim_win_close, win, true)
+    elseif is_gitpanel_diff_view(name) then
+      if keep_one and not keep_win then
+        keep_win = win
+      else
+        pcall(vim.api.nvim_win_close, win, true)
+      end
     end
   end
+  return keep_win
 end
 
 -- First window that isn't a sidebar/panel occupant; nil if none exist.
@@ -538,8 +546,7 @@ local function scratch_buffer(name, lines, path)
 end
 
 local function open_scratch(name, lines, path)
-  close_diffs()
-  local win = main_win()
+  local win = close_diffs(true) or main_win()
   if win then
     vim.api.nvim_set_current_win(win)
   else
@@ -549,9 +556,7 @@ local function open_scratch(name, lines, path)
 end
 
 local function show_side_by_side(previous_name, previous_lines, updated_name, updated_lines, path)
-  close_diffs()
-
-  local win = main_win()
+  local win = close_diffs(true) or main_win()
   if win then
     vim.api.nvim_set_current_win(win)
   else
@@ -605,10 +610,8 @@ local function select_entry(entry)
     return
   end
 
-  close_diffs()
-
   if is_added_entry(entry) then
-    local win = main_win()
+    local win = close_diffs(true) or main_win()
     if win then
       vim.api.nvim_set_current_win(win)
     else
