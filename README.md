@@ -41,55 +41,9 @@ Managed with [lazy.nvim](https://github.com/folke/lazy.nvim); each spec lives in
 
 ## Layout
 
-A VSCode-style layout. The activity bar and the Source Control panel are custom
-modules in `lua/core/`; the other regions come from the plugins above.
-
-```text
-┌─────┬──────────────────────────────┬──────────────────────────────────────────────────────────────────┐
-│     │ sidebar title                │ bufferline (buffer tabs)                                         │
-│  a  ├──────────────────────────────┼──────────────────────────────────────────────────────────────────┤
-│  c  │                              │ dropbar (breadcrumbs)                                            │
-│  t  │                              │                                                                  │
-│  i  │                              │                                                                  │
-│  v  │  nvim-tree /                 │                                                                  │
-│  i  │  gitpanel                    │                                                                  │
-│  t  │                              │  editor                                                          │
-│  y  │                              │                                                                  │
-│     │                              │                                                                  │
-│  b  │                              │                                                                  │
-│  a  │                              │                                                                  │
-│  r  │                              │                                                                  │
-│     │                              │                                                                  │
-│     │                              │                                                                  │
-│     │                              │                                                                  │
-│     │                              ├──────────────────────────────────────────────────────────────────┤
-│     │                              │  Terminal   Problems                                          ✕  │
-│     │                              │ ▔▔▔▔▔▔▔▔▔▔                                                       │
-│     │                              │                                                                  │
-│     │                              │                                                                  │
-│     │                              │                                                                  │
-│     │                              │                                                                  │
-├─────┴──────────────────────────────┴──────────────────────────────────────────────────────────────────┤
-│ lualine (statusline)                                                                                  │
-└───────────────────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-- **Activity bar** (`lua/core/activitybar.lua`, `:ActivityBar toggle`): icon
-  column at the far left. Buttons: Explorer (nvim-tree), Search (telescope live
-  grep), Source Control (gitpanel), and Plugins (Lazy) at the bottom.
-- **Sidebar**: one occupant at a time, as in VSCode — the nvim-tree file
-  explorer or the Source Control panel (`lua/core/gitpanel.lua`,
-  `:GitPanel toggle`) with two foldable, resizable sections: Changes
-  (staged/unstaged lists as foldable sub-sections; selecting a file diffs it
-  against the index or `HEAD` with gitsigns) and Commits (recent history;
-  selecting a commit opens its patch). The bufferline shows a centered title
-  over the sidebar.
-- **Bottom panel** (`lua/core/panel.lua`, `:Panel`): Terminal and Problems as
-  tabs in a clickable strip with a ✕ close button; `` Ctrl+` `` toggles the
-  Terminal tab and `<leader>xx` the Problems tab. The shell session survives
-  closing the panel. It sits under the editor, and widens to everything right of
-  the activity bar when no sidebar is open.
-- **Editor**: bufferline tabs on top, dropbar breadcrumbs in the winbar.
+The workspace layout follows VSCode's shape: a fixed activity bar, one sidebar
+occupant, the editor area, and a bottom panel. See the detailed
+[layout reference](docs/layout/README.md).
 
 ## 참고
 
