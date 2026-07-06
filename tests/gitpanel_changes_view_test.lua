@@ -20,6 +20,16 @@ local function editor_windows()
   return wins
 end
 
+local function listed_no_name_buffers()
+  local buffers = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[buf].buflisted and vim.api.nvim_buf_get_name(buf) == "" then
+      buffers[#buffers + 1] = buf
+    end
+  end
+  return buffers
+end
+
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, "p")
 run({ "git", "init" }, root)
@@ -111,6 +121,7 @@ for i, line in ipairs(rendered_changes) do
 end
 assert(changed_line, vim.inspect(rendered_changes))
 assert(second_line, vim.inspect(rendered_changes))
+local initial_no_name_count = #listed_no_name_buffers()
 local has_added = false
 local has_deleted = false
 for _, line in ipairs(rendered_changes) do
@@ -142,3 +153,24 @@ local replaced_diff = vim.wait(1000, function()
 end, 20)
 assert(replaced_diff, "selecting another changed file should replace the existing two-pane diff")
 assert(vim.api.nvim_win_get_width(changes_win) == sidebar_width, "sidebar width changed after replacing diff selection")
+assert(
+  #listed_no_name_buffers() == initial_no_name_count,
+  "changed file reselection leaked [No Name] buffers: " .. vim.inspect(listed_no_name_buffers())
+)
+
+gitpanel.click({ winid = changes_win, winrow = changed_line + 1, line = changed_line })
+local restored_diff = vim.wait(1000, function()
+  local wins = editor_windows()
+  if #wins ~= 2 then
+    return false
+  end
+  local left = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(wins[1]), 0, -1, false)
+  local right = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(wins[2]), 0, -1, false)
+  return vim.deep_equal(left, { "old" }) and vim.deep_equal(right, { "new" })
+end, 20)
+assert(restored_diff, "selecting the first changed file again should replace the existing two-pane diff")
+assert(vim.api.nvim_win_get_width(changes_win) == sidebar_width, "sidebar width changed after third diff selection")
+assert(
+  #listed_no_name_buffers() == initial_no_name_count,
+  "repeated changed file selection leaked [No Name] buffers: " .. vim.inspect(listed_no_name_buffers())
+)

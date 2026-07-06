@@ -30,6 +30,16 @@ local function editor_windows()
   return wins
 end
 
+local function listed_no_name_buffers()
+  local buffers = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[buf].buflisted and vim.api.nvim_buf_get_name(buf) == "" then
+      buffers[#buffers + 1] = buf
+    end
+  end
+  return buffers
+end
+
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, "p")
 run({ "git", "init" }, root)
@@ -116,6 +126,7 @@ for i, line in ipairs(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)) do
 end
 assert(changed_line, vim.inspect(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)))
 assert(second_line, vim.inspect(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)))
+local initial_no_name_count = #listed_no_name_buffers()
 
 gitpanel.click({ winid = commits_win, winrow = changed_line + 1, line = changed_line })
 local clicked_diff = vim.wait(1000, function()
@@ -141,4 +152,28 @@ assert(replaced_diff, "selecting another commit file should replace the existing
 assert(
   vim.api.nvim_win_get_width(commits_win) == sidebar_width,
   "sidebar width changed after replacing commit diff selection"
+)
+assert(
+  #listed_no_name_buffers() == initial_no_name_count,
+  "commit file reselection leaked [No Name] buffers: " .. vim.inspect(listed_no_name_buffers())
+)
+
+gitpanel.click({ winid = commits_win, winrow = changed_line + 1, line = changed_line })
+local restored_diff = vim.wait(1000, function()
+  local editor_wins = editor_windows()
+  if #editor_wins ~= 2 then
+    return false
+  end
+  local left = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(editor_wins[1]), 0, -1, false)
+  local right = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(editor_wins[2]), 0, -1, false)
+  return vim.deep_equal(left, { "old" }) and vim.deep_equal(right, { "new" })
+end, 20)
+assert(restored_diff, "selecting the first commit file again should replace the existing two-pane diff")
+assert(
+  vim.api.nvim_win_get_width(commits_win) == sidebar_width,
+  "sidebar width changed after third commit diff selection"
+)
+assert(
+  #listed_no_name_buffers() == initial_no_name_count,
+  "repeated commit file selection leaked [No Name] buffers: " .. vim.inspect(listed_no_name_buffers())
 )

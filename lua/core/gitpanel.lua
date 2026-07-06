@@ -568,7 +568,7 @@ local function show_side_by_side(previous_name, previous_lines, updated_name, up
 
   local left_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(left_win, left)
-  vim.cmd("rightbelow vertical new")
+  vim.cmd("rightbelow vertical split")
   local right_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(right_win, right)
 
