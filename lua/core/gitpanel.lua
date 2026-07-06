@@ -468,17 +468,22 @@ local function render()
   refresh_winbars()
 end
 
--- Wipes the previous selection's views: `diffoff!` plus closing gitsigns
--- revision windows. Commit patch buffers need no handling here: they are
--- bufhidden=wipe and every selection replaces them in the reused main
--- window, which hides (and thus wipes) them. Deleting them explicitly
--- while displayed would close the main window and leak its width into the
--- winfixwidth sidebar.
+local function is_gitpanel_diff_view(name)
+  return vim.startswith(name, "gitpanel://previous/")
+    or vim.startswith(name, "gitpanel://updated/")
+    or vim.startswith(name, "gitpanel://commit-previous/")
+    or vim.startswith(name, "gitpanel://commit-updated/")
+end
+
+-- Wipes the previous selection's diff views before opening another selection.
+-- `diffoff!` clears diff state, but does not remove the old right-hand scratch
+-- window; close those scratch windows so the next selection still owns exactly
+-- two editor panes.
 local function close_diffs()
   pcall(vim.cmd, "diffoff!")
   for _, win in ipairs(vim.api.nvim_list_wins()) do
     local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
-    if vim.startswith(name, "gitsigns://") then
+    if vim.startswith(name, "gitsigns://") or is_gitpanel_diff_view(name) then
       pcall(vim.api.nvim_win_close, win, true)
     end
   end

@@ -19,6 +19,17 @@ local function diff_windows()
   return wins
 end
 
+local function editor_windows()
+  local exclude = { gitpanel = true, activitybar = true, NvimTree = true, panelterminal = true, panelproblems = true }
+  local wins = vim.tbl_filter(function(win)
+    return not exclude[vim.bo[vim.api.nvim_win_get_buf(win)].filetype]
+  end, vim.api.nvim_tabpage_list_wins(0))
+  table.sort(wins, function(a, b)
+    return vim.api.nvim_win_get_position(a)[2] < vim.api.nvim_win_get_position(b)[2]
+  end)
+  return wins
+end
+
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, "p")
 run({ "git", "init" }, root)
@@ -26,12 +37,14 @@ run({ "git", "config", "user.email", "test@example.com" }, root)
 run({ "git", "config", "user.name", "Test User" }, root)
 
 vim.fn.writefile({ "old" }, root .. "/changed.txt")
-run({ "git", "add", "changed.txt" }, root)
+vim.fn.writefile({ "old-second" }, root .. "/second.txt")
+run({ "git", "add", "changed.txt", "second.txt" }, root)
 run({ "git", "commit", "-m", "initial" }, root)
 
 vim.fn.writefile({ "new" }, root .. "/changed.txt")
+vim.fn.writefile({ "new-second" }, root .. "/second.txt")
 vim.fn.writefile({ "added" }, root .. "/added.txt")
-run({ "git", "add", "changed.txt", "added.txt" }, root)
+run({ "git", "add", "changed.txt", "second.txt", "added.txt" }, root)
 run({ "git", "commit", "-m", "update files" }, root)
 local hash = vim.trim(run({ "git", "rev-parse", "--short", "HEAD" }, root).stdout)
 
@@ -92,16 +105,31 @@ assert(expanded, "commit file tree did not expand")
 
 local commits_buf = vim.api.nvim_win_get_buf(commits_win)
 local changed_line
+local second_line
 for i, line in ipairs(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)) do
   if line:find("changed.txt", 1, true) then
     changed_line = i
-    break
+  elseif line:find("second.txt", 1, true) then
+    second_line = i
   end
 end
 assert(changed_line, vim.inspect(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)))
+assert(second_line, vim.inspect(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)))
 
 gitpanel.click({ winid = commits_win, winrow = changed_line + 1, line = changed_line })
 local clicked_diff = vim.wait(1000, function()
   return #diff_windows() == 2
 end, 20)
 assert(clicked_diff, "clicking a changed commit file should open a side-by-side diff")
+
+gitpanel.click({ winid = commits_win, winrow = second_line + 1, line = second_line })
+local replaced_diff = vim.wait(1000, function()
+  local editor_wins = editor_windows()
+  if #editor_wins ~= 2 then
+    return false
+  end
+  local left = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(editor_wins[1]), 0, -1, false)
+  local right = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(editor_wins[2]), 0, -1, false)
+  return vim.deep_equal(left, { "old-second" }) and vim.deep_equal(right, { "new-second" })
+end, 20)
+assert(replaced_diff, "selecting another commit file should replace the existing two-pane diff")

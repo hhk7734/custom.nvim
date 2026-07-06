@@ -9,6 +9,17 @@ local function run(cmd, cwd)
   return res
 end
 
+local function editor_windows()
+  local exclude = { gitpanel = true, activitybar = true, NvimTree = true, panelterminal = true, panelproblems = true }
+  local wins = vim.tbl_filter(function(win)
+    return not exclude[vim.bo[vim.api.nvim_win_get_buf(win)].filetype]
+  end, vim.api.nvim_tabpage_list_wins(0))
+  table.sort(wins, function(a, b)
+    return vim.api.nvim_win_get_position(a)[2] < vim.api.nvim_win_get_position(b)[2]
+  end)
+  return wins
+end
+
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, "p")
 run({ "git", "init" }, root)
@@ -16,10 +27,12 @@ run({ "git", "config", "user.email", "test@example.com" }, root)
 run({ "git", "config", "user.name", "Test User" }, root)
 
 vim.fn.writefile({ "old" }, root .. "/changed.txt")
+vim.fn.writefile({ "old-second" }, root .. "/second.txt")
 vim.fn.writefile({ "old" }, root .. "/deleted.txt")
-run({ "git", "add", "changed.txt", "deleted.txt" }, root)
+run({ "git", "add", "changed.txt", "second.txt", "deleted.txt" }, root)
 run({ "git", "commit", "-m", "initial" }, root)
 vim.fn.writefile({ "new" }, root .. "/changed.txt")
+vim.fn.writefile({ "new-second" }, root .. "/second.txt")
 vim.fn.writefile({ "added" }, root .. "/added.txt")
 vim.fn.delete(root .. "/deleted.txt")
 
@@ -84,15 +97,19 @@ local changes_buf = vim.api.nvim_win_get_buf(changes_win)
 local rendered_changes = vim.api.nvim_buf_get_lines(changes_buf, 0, -1, false)
 assert(rendered_changes[1] == "  Changes", vim.inspect(rendered_changes))
 local changed_line
+local second_line
 for i, line in ipairs(rendered_changes) do
   if line:find("changed.txt", 1, true) then
     changed_line = i
     assert(line:find("%[modified%]"), line)
     assert(line:find(" changed.txt", 1, true), line)
-    break
+  elseif line:find("second.txt", 1, true) then
+    second_line = i
+    assert(line:find("%[modified%]"), line)
   end
 end
 assert(changed_line, vim.inspect(rendered_changes))
+assert(second_line, vim.inspect(rendered_changes))
 local has_added = false
 local has_deleted = false
 for _, line in ipairs(rendered_changes) do
@@ -110,3 +127,15 @@ local clicked_diff = vim.wait(1000, function()
   return #wins == 2
 end, 20)
 assert(clicked_diff, "single-clicking a changed file should open a side-by-side diff")
+
+gitpanel.click({ winid = changes_win, winrow = second_line + 1, line = second_line })
+local replaced_diff = vim.wait(1000, function()
+  local wins = editor_windows()
+  if #wins ~= 2 then
+    return false
+  end
+  local left = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(wins[1]), 0, -1, false)
+  local right = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(wins[2]), 0, -1, false)
+  return vim.deep_equal(left, { "old-second" }) and vim.deep_equal(right, { "new-second" })
+end, 20)
+assert(replaced_diff, "selecting another changed file should replace the existing two-pane diff")
