@@ -519,6 +519,30 @@ local function change_repo_path(entry, root)
   return vim.fn.fnamemodify(entry.path, ":.")
 end
 
+local function diffview_args_for_path(root, rev, path, extra)
+  local args = { "-C" .. root }
+  if rev then
+    args[#args + 1] = rev
+  end
+  for _, arg in ipairs(extra or {}) do
+    args[#args + 1] = arg
+  end
+  args[#args + 1] = "--selected-file=" .. path
+  args[#args + 1] = "--"
+  args[#args + 1] = path
+  return args
+end
+
+local function diffview_args_for_change(entry, root)
+  local path = change_repo_path(entry, root)
+  local extra = entry.section == "staged" and { "--staged" } or nil
+  return diffview_args_for_path(root, nil, path, extra)
+end
+
+local function diffview_args_for_commit(entry, root)
+  return diffview_args_for_path(root, entry.hash .. "^!", entry.path)
+end
+
 local function git_blob_lines(root, spec)
   local res = vim.system({ "git", "-C", root, "show", spec }):wait()
   if res.code ~= 0 or not res.stdout then
@@ -581,12 +605,57 @@ local function show_side_by_side(previous_name, previous_lines, updated_name, up
   vim.api.nvim_set_current_win(right_win)
 end
 
+local function close_diffview_views()
+  local ok, lib = pcall(require, "diffview.lib")
+  if not ok then
+    return
+  end
+
+  for _, view in ipairs(vim.list_extend({}, lib.views or {})) do
+    pcall(function()
+      view:close()
+    end)
+    pcall(lib.dispose_view, view)
+  end
+end
+
+local function load_diffview()
+  local ok, diffview = pcall(require, "diffview")
+  if ok then
+    return diffview
+  end
+
+  local lazy_ok, lazy = pcall(require, "lazy")
+  if lazy_ok then
+    pcall(lazy.load, { plugins = { "diffview.nvim" } })
+    ok, diffview = pcall(require, "diffview")
+    if ok then
+      return diffview
+    end
+  end
+end
+
+local function open_diffview(args)
+  local diffview = load_diffview()
+  if not diffview then
+    return false
+  end
+
+  close_diffview_views()
+  diffview.open(args)
+  return true
+end
+
 local function show_change_diff(entry)
   local root = state.root or repo_root()
   if not root then
     return
   end
   local repo_path = change_repo_path(entry, root)
+  if open_diffview(diffview_args_for_change(entry, root)) then
+    return
+  end
+
   local previous_spec = entry.section == "staged" and ("HEAD:" .. repo_path) or (":" .. repo_path)
   local updated_lines = entry.section == "staged" and git_blob_lines(root, ":" .. repo_path)
     or read_file_lines(entry.path)
@@ -611,6 +680,7 @@ local function select_entry(entry)
   end
 
   if is_added_entry(entry) then
+    close_diffview_views()
     local win = close_diffs(true) or main_win()
     if win then
       vim.api.nvim_set_current_win(win)
@@ -637,7 +707,12 @@ local function open_commit_file(entry)
   local updated_lines = git_blob_lines(state.root, entry.hash .. ":" .. entry.path) or {}
   local name = "gitpanel://commit/" .. entry.hash .. "/" .. entry.path
   if is_added_entry(entry) then
+    close_diffview_views()
     open_scratch(name, updated_lines, entry.path)
+    return
+  end
+
+  if open_diffview(diffview_args_for_commit(entry, state.root)) then
     return
   end
 
@@ -910,6 +985,8 @@ end
 
 M._test = {
   render_commit_file_tree = render_commit_file_tree,
+  diffview_args_for_change = diffview_args_for_change,
+  diffview_args_for_commit = diffview_args_for_commit,
   open_change_entry = select_entry,
   open_commit_entry = function(root, entry)
     state.root = root

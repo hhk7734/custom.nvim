@@ -37,6 +37,7 @@ Managed with [lazy.nvim](https://github.com/folke/lazy.nvim); each spec lives in
 | [conform.nvim](https://github.com/stevearc/conform.nvim)                        | Formatter runner (lua: stylua, markdown: deno fmt; formats on save).                              |
 | [mason.nvim](https://github.com/mason-org/mason.nvim)                           | Package manager for external tools; auto-installs the configured tools (stylua, deno) on startup. |
 | [gitsigns.nvim](https://github.com/lewis6991/gitsigns.nvim)                     | Git add/change/delete signs in the gutter.                                                        |
+| [diffview.nvim](https://github.com/sindrets/diffview.nvim)                      | Git diff views used by the custom Source Control sidebar.                                         |
 | [dropbar.nvim](https://github.com/Bekaboo/dropbar.nvim)                         | VSCode-style breadcrumbs winbar (`<leader>;` to pick).                                            |
 
 ## Layout
