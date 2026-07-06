@@ -28,6 +28,8 @@ local state = {
   },
   -- Fold flags for the sub-sections inside Changes.
   folded = { staged = false, changes = false },
+  -- Fold flags for changes section directories.
+  change_dir_expanded = {},
   -- Fold flags for commits and their changed directories.
   commit_expanded = {},
   commit_dir_expanded = {},
@@ -168,6 +170,10 @@ local function commit_dir_key(hash, dir)
   return hash .. "\0" .. dir
 end
 
+local function change_dir_key(section, dir)
+  return section .. "\0" .. dir
+end
+
 local function new_tree_node(name, path)
   return { name = name, path = path, dirs = {}, files = {} }
 end
@@ -198,6 +204,7 @@ local function build_file_tree(files)
         old_path = item.old_path,
         path = item.path,
         status = item.status,
+        untracked = item.untracked,
       }
     end
   end
@@ -292,14 +299,13 @@ local function status_hl(status)
   return "Changed" -- M R C T
 end
 
--- File icons come from nvim-web-devicons at runtime; never hardcode
--- nerd-font/PUA glyphs in source (see repo memory).
-local function file_icon(path)
-  local ok, icon = pcall(function()
-    local devicons = require("nvim-web-devicons")
-    return devicons.get_icon(vim.fn.fnamemodify(path, ":t"), vim.fn.fnamemodify(path, ":e"), { default = true })
-  end)
-  return (ok and icon) or ""
+local function status_label(status, untracked)
+  if untracked or status == "A" or status == "?" then
+    return "added"
+  elseif status == "D" then
+    return "deleted"
+  end
+  return "modified" -- M R C T and any other tracked content change
 end
 
 -- Sticky, clickable section header. %@ regions need a v:lua-reachable
@@ -331,6 +337,41 @@ local function write_section(s, lines, marks)
   end
 end
 
+local function render_change_tree_node(node, root, section, indent, lines, entries, marks)
+  for _, dir in ipairs(sorted_dirs(node.dirs)) do
+    local expanded = state.change_dir_expanded[change_dir_key(section, dir.path)] ~= false
+    local arrow = tree_arrow(expanded)
+    local icon = tree_folder_icon(expanded)
+    lines[#lines + 1] = string.rep(" ", indent) .. arrow .. icon .. tree_icons().icon_padding .. dir.name
+    entries[#lines] = { change_dir = dir.path, section = section }
+    if expanded then
+      render_change_tree_node(dir, root, section, indent + 2, lines, entries, marks)
+    end
+  end
+
+  for _, file in ipairs(sorted_files(node.files)) do
+    local label = status_label(file.status, file.untracked)
+    lines[#lines + 1] = string.rep(" ", indent)
+      .. tree_file_icon(file.path)
+      .. tree_icons().icon_padding
+      .. file.name
+      .. " ["
+      .. label
+      .. "]"
+    entries[#lines] = {
+      path = root .. "/" .. file.path,
+      repo_path = file.path,
+      section = section,
+      untracked = file.untracked,
+      status = file.status,
+    }
+    local label_start = lines[#lines]:find("[" .. label .. "]", 1, true)
+    if label_start then
+      marks[#lines] = { col = label_start - 1, end_col = #lines[#lines], hl = status_hl(file.status) }
+    end
+  end
+end
+
 local function render_changes()
   local s = state.sections.changes
   if not (s.buf and vim.api.nvim_buf_is_valid(s.buf)) then
@@ -348,31 +389,21 @@ local function render_changes()
     if #staged == 0 and #changes == 0 then
       lines = { "No changes" }
     else
-      -- A foldable sub-list: header line plus (unless folded) file lines.
+      -- A foldable sub-list: header line plus a nvim-tree style file tree.
       local function add_group(name, flag, items)
         if #items == 0 then
           return
         end
-        local marker = state.folded[flag] and "▸" or "▾"
-        table.insert(lines, marker .. " " .. name)
+        local expanded = not state.folded[flag]
+        local marker = tree_arrow(expanded)
+        local icon = tree_folder_icon(expanded)
+        table.insert(lines, marker .. icon .. tree_icons().icon_padding .. name)
         entries[#lines] = { header = flag }
         marks[#lines] = { col = 0, end_col = #lines[#lines], hl = "Title" }
-        if state.folded[flag] then
+        if not expanded then
           return
         end
-        for _, item in ipairs(items) do
-          local icon = file_icon(item.path)
-          table.insert(lines, string.format("  %s %s %s", item.status, icon, item.path))
-          entries[#lines] = {
-            path = root .. "/" .. item.path,
-            repo_path = item.path,
-            section = flag,
-            untracked = item.untracked,
-            status = item.status,
-          }
-          -- The status letter sits right after the 2-space indent.
-          marks[#lines] = { col = 2, end_col = 3, hl = status_hl(item.status) }
-        end
+        render_change_tree_node(build_file_tree(items), root, flag, 2, lines, entries, marks)
       end
       add_group("Staged", "staged", staged)
       add_group("Changes", "changes", changes)
@@ -613,6 +644,12 @@ local function open_commit_file(entry)
   )
 end
 
+local function toggle_change_dir(section, dir)
+  local key = change_dir_key(section, dir)
+  state.change_dir_expanded[key] = state.change_dir_expanded[key] == false
+  render_changes()
+end
+
 local function toggle_commit(hash)
   state.commit_expanded[hash] = not state.commit_expanded[hash]
   render_commits()
@@ -644,6 +681,8 @@ local function activate(key, entry)
     end
   elseif entry.header then
     toggle_fold(entry.header)
+  elseif entry.change_dir then
+    toggle_change_dir(entry.section, entry.change_dir)
   else
     select_entry(entry)
   end
