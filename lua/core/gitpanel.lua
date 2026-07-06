@@ -317,6 +317,7 @@ local function render_changes()
           table.insert(lines, string.format("  %s %s %s", item.status, icon, item.path))
           entries[#lines] = {
             path = root .. "/" .. item.path,
+            repo_path = item.path,
             section = flag,
             untracked = item.untracked,
             status = item.status,
@@ -415,10 +416,53 @@ local function main_win()
   return nil
 end
 
-local function select_entry(entry)
-  if not entry then
+local function change_repo_path(entry, root)
+  if entry.repo_path then
+    return entry.repo_path
+  end
+  local prefix = root and (root .. "/") or nil
+  if prefix and vim.startswith(entry.path, prefix) then
+    return entry.path:sub(#prefix + 1)
+  end
+  return vim.fn.fnamemodify(entry.path, ":.")
+end
+
+local function git_blob_lines(root, spec)
+  local res = vim.system({ "git", "-C", root, "show", spec }):wait()
+  if res.code ~= 0 or not res.stdout then
+    return nil
+  end
+  return vim.split(res.stdout:gsub("\n$", ""), "\n", { plain = true })
+end
+
+local function read_file_lines(path)
+  local ok, lines = pcall(vim.fn.readfile, path)
+  return ok and lines or {}
+end
+
+local function scratch_buffer(name, lines, path)
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_name(buf, name)
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
+  local ft = vim.filetype.match({ filename = path })
+  if ft then
+    vim.bo[buf].filetype = ft
+  end
+  vim.bo[buf].modifiable = false
+  vim.bo[buf].bufhidden = "wipe"
+  return buf
+end
+
+local function show_change_diff(entry)
+  local root = state.root or repo_root()
+  if not root then
     return
   end
+  local repo_path = change_repo_path(entry, root)
+  local previous_spec = entry.section == "staged" and ("HEAD:" .. repo_path) or (":" .. repo_path)
+  local updated_lines = entry.section == "staged" and git_blob_lines(root, ":" .. repo_path)
+    or read_file_lines(entry.path)
+  local previous_lines = git_blob_lines(root, previous_spec) or {}
 
   close_diffs()
 
@@ -429,32 +473,48 @@ local function select_entry(entry)
     vim.cmd("botright vsplit")
   end
 
-  vim.cmd("edit " .. vim.fn.fnameescape(entry.path))
+  local left = scratch_buffer("gitpanel://previous/" .. repo_path, previous_lines, repo_path)
+  local right = scratch_buffer("gitpanel://updated/" .. repo_path, updated_lines or {}, repo_path)
 
-  if entry.untracked then
+  local left_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(left_win, left)
+  vim.cmd("rightbelow vertical new")
+  local right_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(right_win, right)
+
+  vim.api.nvim_win_call(left_win, function()
+    vim.cmd("diffthis")
+  end)
+  vim.api.nvim_win_call(right_win, function()
+    vim.cmd("diffthis")
+  end)
+  vim.api.nvim_set_current_win(right_win)
+end
+
+local function is_added_entry(entry)
+  return entry.untracked or entry.status == "A" or entry.status == "?"
+end
+
+local function select_entry(entry)
+  if not entry then
+    return
+  end
+
+  close_diffs()
+
+  if is_added_entry(entry) then
+    local win = main_win()
+    if win then
+      vim.api.nvim_set_current_win(win)
+    else
+      vim.cmd("botright vsplit")
+    end
+    vim.cmd("edit " .. vim.fn.fnameescape(entry.path))
     render()
     return
   end
 
-  -- gitsigns attaches to a freshly-opened buffer asynchronously (its own
-  -- BufReadPost autocmd triggers it) and only fills in compare_text (the
-  -- index diff base) once that finishes; diffthis() asserts on it being
-  -- present, so poll the cache instead of racing it. (Calling attach()
-  -- again here would just be de-duplicated against the in-flight one, with
-  -- its callback firing immediately rather than on completion.) vim.wait
-  -- keeps the event loop turning while it does.
-  local bufnr = vim.api.nvim_get_current_buf()
-  local base = entry.section == "staged" and "HEAD" or nil
-  vim.wait(1000, function()
-    local bcache = require("gitsigns.cache").cache[bufnr]
-    return bcache ~= nil and bcache.compare_text ~= nil
-  end, 20)
-  if vim.api.nvim_buf_is_valid(bufnr) then
-    require("gitsigns").diffthis(base, { vertical = true })
-  end
-
-  -- gitsigns.diffthis restores focus to this window (the file just opened);
-  -- VSCode moves focus to the diff too, so the panel is left unfocused.
+  show_change_diff(entry)
   render()
 end
 
@@ -556,9 +616,14 @@ function M.click(pos)
           return
         end
         pcall(vim.api.nvim_win_set_cursor, s.win, { pos.line, 0 })
-        -- Nvim-tree style: a single click focuses/selects the row; <CR> or
-        -- double-click performs the row action.
-        vim.api.nvim_set_current_win(s.win)
+        local entry = s.lines[pos.line]
+        if entry and entry.path then
+          activate(section.key, entry)
+        else
+          -- Nvim-tree style: a single click focuses/selects foldable rows;
+          -- <CR> or double-click performs the row action.
+          vim.api.nvim_set_current_win(s.win)
+        end
       end)
       return true
     end
@@ -740,6 +805,7 @@ end
 
 M._test = {
   render_commit_file_tree = render_commit_file_tree,
+  open_change_entry = select_entry,
 }
 
 return M

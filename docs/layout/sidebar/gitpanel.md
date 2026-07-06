@@ -59,13 +59,15 @@ Click a sub-list header, or press `<CR>` on it, to fold or unfold it. File rows
 show the Git status letter, a runtime file icon from `nvim-web-devicons`, and
 the repo-relative path.
 
-Selecting a file opens it in the main editor area and then:
+Selecting a changed tracked file opens a side-by-side diff in the main editor
+area: the previous version is on the left and the updated version is on the
+right. For `Staged` rows, the updated version is the index blob; for `Changes`
+rows, it is the working tree file.
 
-- staged file: opens a vertical gitsigns diff against `HEAD`;
-- unstaged tracked file: opens a vertical gitsigns diff against the index;
-- untracked file: opens the file without a diff base.
+Selecting an added file, including untracked files, opens the file contents
+directly without a diff.
 
-Before opening a new file diff, `gitpanel` clears the previous diff view and
+Before opening a new change view, `gitpanel` clears the previous diff view and
 closes stale `gitsigns://` revision windows.
 
 ## Commits Section
@@ -93,13 +95,14 @@ another commit file replaces the previous patch buffer in the main editor area.
 
 When focus is inside either section:
 
-| Key / mouse        | Action                    |
-| ------------------ | ------------------------- |
-| `<CR>`             | Activate the current row. |
-| Double-click a row | Activate the clicked row. |
-| Single-click a row | Focus/select the row.     |
-| `R`                | Refresh both sections.    |
-| `q`                | Close the sidebar.        |
+| Key / mouse             | Action                         |
+| ----------------------- | ------------------------------ |
+| `<CR>`                  | Activate the current row.      |
+| Double-click a row      | Activate the clicked row.      |
+| Single-click a file row | Open the clicked file row.     |
+| Single-click a fold row | Focus/select the foldable row. |
+| `R`                     | Refresh both sections.         |
+| `q`                     | Close the sidebar.             |
 
 Single clicks are routed through the activity bar's global click dispatcher so
 clicks outside the panel continue to reach the rest of the UI. Double-clicks use
