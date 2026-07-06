@@ -76,6 +76,9 @@ The Source Control sidebar contains two stacked windows in one column:
 - Changes: staged and unstaged files, each as foldable sub-sections.
 - Commits: recent commits; selecting one opens its patch in the editor area.
 
+See [GitPanel Sidebar](sidebar/gitpanel.md) for the detailed Source Control
+behavior.
+
 The sidebar column is kept full height so the bottom panel opens only under the
 editor area, not under the activity bar or sidebar.
 
