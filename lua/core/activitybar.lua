@@ -334,25 +334,14 @@ function M.open()
 end
 
 function M.close()
-  if not (state.win and vim.api.nvim_win_is_valid(state.win)) then
-    state.win = nil
-    return
-  end
-  -- Closing the last window of a tabpage is an error (E444); keep the bar.
-  local tab = vim.api.nvim_win_get_tabpage(state.win)
-  if #vim.api.nvim_tabpage_list_wins(tab) == 1 then
-    return
-  end
-  vim.api.nvim_win_close(state.win, true)
-  state.win = nil
+  -- The activity bar is part of the permanent workspace frame. Keep this API as
+  -- a no-op so callers cannot accidentally remove the left column.
+  M.open()
 end
 
 function M.toggle()
-  if state.win and vim.api.nvim_win_is_valid(state.win) then
-    M.close()
-  else
-    M.open()
-  end
+  -- Sidebar occupants are user-toggleable; the activity bar itself is not.
+  M.open()
 end
 
 function M.setup()
