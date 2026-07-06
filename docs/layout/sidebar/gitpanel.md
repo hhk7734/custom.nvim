@@ -12,23 +12,41 @@ Use any of these entry points:
 - `:GitPanel`: toggles the sidebar.
 - `:GitPanel open`, `:GitPanel close`, `:GitPanel toggle`: explicit actions.
 
-Opening `gitpanel` closes `nvim-tree` first, so Explorer and Source Control never
-occupy two sidebars at the same time. The sidebar opens immediately to the right
-of the activity bar; if the activity bar is missing, it falls back to a left
-vertical split.
+Opening `gitpanel` closes `nvim-tree` first, so Explorer and Source Control
+never occupy two sidebars at the same time. The sidebar opens immediately to the
+right of the activity bar; if the activity bar is missing, it falls back to a
+left vertical split.
 
 ## Sections
 
 The sidebar is one logical frame split into two section windows:
 
-| Section | Initial size | Content |
-| --- | --- | --- |
-| Changes | Remaining height | Staged files and worktree changes from `git status --porcelain -z`. |
-| Commits | About one third of the sidebar height | The last 50 commits from `git log`. |
+| Section | Initial size                          | Content                                                             |
+| ------- | ------------------------------------- | ------------------------------------------------------------------- |
+| Changes | Remaining height                      | Staged files and worktree changes from `git status --porcelain -z`. |
+| Commits | About one third of the sidebar height | The last 50 commits from `git log`.                                 |
 
 Each section has a sticky winbar header. Click the header chevron to collapse or
 expand that section. A collapsed section keeps only the header row visible and
 restores its previous height when expanded.
+
+## Layout Diagram
+
+```text
+▾ Changes
+▾ Staged
+  M lua/core/gitpanel.lua
+▾ Changes
+  ? docs/layout/sidebar/gitpanel.md
+
+▾ Commits
+▸ 3e28d7b docs(layout): document gitpanel sidebar
+▾ 57b01ce docs(layout): move detailed layout reference
+  ▾ docs
+    ▾ layout
+      README.md
+  README.md
+```
 
 ## Changes Section
 
@@ -38,8 +56,8 @@ The Changes section contains two foldable sub-lists when they have entries:
 - `Changes`: worktree changes and untracked files.
 
 Click a sub-list header, or press `<CR>` on it, to fold or unfold it. File rows
-show the Git status letter, a runtime file icon from `nvim-web-devicons`, and the
-repo-relative path.
+show the Git status letter, a runtime file icon from `nvim-web-devicons`, and
+the repo-relative path.
 
 Selecting a file opens it in the main editor area and then:
 
@@ -52,25 +70,33 @@ closes stale `gitsigns://` revision windows.
 
 ## Commits Section
 
-The Commits section lists commit rows as:
+The Commits section lists recent commits as nvim-tree style foldable rows:
 
 ```text
- <short-hash> <subject>
+▾ Commits
+▸ <hash> <title>
+▾ <hash> <title>
+  ▾ <changed dir>
+    <changed file>
 ```
 
-Selecting a commit opens `git show <hash>` in a read-only scratch buffer named
-`gitpanel://commit/<hash>` with filetype `git`. Selecting another commit replaces
-the previous patch buffer in the main editor area.
+Commit rows are collapsed by default. Selecting a commit row folds or unfolds
+its changed-file tree. Directory rows are also foldable and default to expanded
+inside an expanded commit.
+
+Selecting a file row opens `git show <hash> -- <path>` in a read-only scratch
+buffer named `gitpanel://commit/<hash>/<path>` with filetype `git`. Selecting
+another commit file replaces the previous patch buffer in the main editor area.
 
 ## Keyboard and Mouse
 
 When focus is inside either section:
 
-| Key | Action |
-| --- | --- |
+| Key    | Action                    |
+| ------ | ------------------------- |
 | `<CR>` | Activate the current row. |
-| `R` | Refresh both sections. |
-| `q` | Close the sidebar. |
+| `R`    | Refresh both sections.    |
+| `q`    | Close the sidebar.        |
 
 Mouse clicks are routed through the activity bar's global click dispatcher so
 clicks outside the panel continue to reach the rest of the UI. Blank rows focus
@@ -93,8 +119,8 @@ is enabled and the current directory can follow the last-entered buffer.
 
 - The Changes and Commits windows together count as one sidebar occupant.
 - Both windows use fixed width and no status/sign/fold columns.
-- The sidebar column remains full height so the bottom panel opens only under the
-  editor area.
+- The sidebar column remains full height so the bottom panel opens only under
+  the editor area.
 - Selecting files or commits uses an existing main editor window when possible;
   it avoids reusing activity bar, `gitpanel`, `NvimTree`, or bottom-panel
   windows.

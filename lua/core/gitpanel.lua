@@ -28,6 +28,10 @@ local state = {
   },
   -- Fold flags for the sub-sections inside Changes.
   folded = { staged = false, changes = false },
+  -- Fold flags for commits and their changed directories.
+  commit_expanded = {},
+  commit_dir_expanded = {},
+  commit_files = {},
   -- repo root resolved on the last render; nil outside a git repo.
   root = nil,
 }
@@ -115,6 +119,83 @@ local function git_log(root)
     end
   end
   return commits
+end
+
+local function git_commit_files(root, hash)
+  local res =
+    vim.system({ "git", "-C", root, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", hash }):wait()
+  if res.code ~= 0 or not res.stdout then
+    return {}
+  end
+  local files = {}
+  for _, path in ipairs(vim.split(res.stdout, "\n", { trimempty = true })) do
+    files[#files + 1] = path
+  end
+  return files
+end
+
+local function commit_dir_key(hash, dir)
+  return hash .. "\0" .. dir
+end
+
+local function new_tree_node(name, path)
+  return { name = name, path = path, dirs = {}, files = {} }
+end
+
+local function build_file_tree(paths)
+  local root = new_tree_node("", "")
+  for _, path in ipairs(paths) do
+    local parts = vim.split(path, "/", { plain = true, trimempty = true })
+    local node = root
+    local prefix = {}
+    for i = 1, #parts - 1 do
+      prefix[#prefix + 1] = parts[i]
+      local dir_path = table.concat(prefix, "/")
+      node.dirs[parts[i]] = node.dirs[parts[i]] or new_tree_node(parts[i], dir_path)
+      node = node.dirs[parts[i]]
+    end
+    if #parts > 0 then
+      node.files[#node.files + 1] = { name = parts[#parts], path = path }
+    end
+  end
+  return root
+end
+
+local function sorted_dirs(dirs)
+  local out = vim.tbl_values(dirs)
+  table.sort(out, function(a, b)
+    return a.name < b.name
+  end)
+  return out
+end
+
+local function sorted_files(files)
+  table.sort(files, function(a, b)
+    return a.name < b.name
+  end)
+  return files
+end
+
+local function render_tree_node(node, hash, dir_expanded, indent, lines, entries)
+  for _, dir in ipairs(sorted_dirs(node.dirs)) do
+    local expanded = dir_expanded[commit_dir_key(hash, dir.path)] ~= false
+    local marker = expanded and "▾" or "▸"
+    lines[#lines + 1] = string.rep(" ", indent) .. marker .. " " .. dir.name
+    entries[#lines] = { hash = hash, dir = dir.path }
+    if expanded then
+      render_tree_node(dir, hash, dir_expanded, indent + 2, lines, entries)
+    end
+  end
+  for _, file in ipairs(sorted_files(node.files)) do
+    lines[#lines + 1] = string.rep(" ", indent) .. file.name
+    entries[#lines] = { hash = hash, path = file.path }
+  end
+end
+
+local function render_commit_file_tree(paths, hash, dir_expanded)
+  local lines, entries = {}, {}
+  render_tree_node(build_file_tree(paths), hash, dir_expanded, 2, lines, entries)
+  return lines, entries
 end
 
 local function status_hl(status)
@@ -228,9 +309,31 @@ local function render_commits()
     lines = { "Not a git repository" }
   else
     for _, c in ipairs(git_log(root)) do
-      table.insert(lines, string.format(" %s %s", c.hash, c.subject))
+      local marker = state.commit_expanded[c.hash] and "▾" or "▸"
+      table.insert(lines, string.format("%s %s %s", marker, c.hash, c.subject))
       entries[#lines] = { hash = c.hash }
-      marks[#lines] = { col = 1, end_col = 1 + #c.hash, hl = "Identifier" }
+      local hash_start = lines[#lines]:find(c.hash, 1, true) - 1
+      marks[#lines] = { col = hash_start, end_col = hash_start + #c.hash, hl = "Identifier" }
+
+      if state.commit_expanded[c.hash] then
+        state.commit_files[c.hash] = state.commit_files[c.hash] or git_commit_files(root, c.hash)
+        local tree_lines, tree_entries =
+          render_commit_file_tree(state.commit_files[c.hash], c.hash, state.commit_dir_expanded)
+        if #tree_lines == 0 then
+          table.insert(lines, "  No files")
+        else
+          for i, line in ipairs(tree_lines) do
+            table.insert(lines, line)
+            entries[#lines] = tree_entries[i]
+            if tree_entries[i].dir then
+              local marker_start = line:find("▾", 1, true) or line:find("▸", 1, true)
+              if marker_start then
+                marks[#lines] = { col = marker_start - 1, end_col = marker_start + 2, hl = "Title" }
+              end
+            end
+          end
+        end
+      end
     end
     if #lines == 0 then
       lines = { "No commits" }
@@ -317,14 +420,21 @@ local function select_entry(entry)
   render()
 end
 
--- Opens a commit's full patch as a read-only scratch buffer in a main
--- window; a newly selected commit replaces the previous one.
+-- Opens a commit patch as a read-only scratch buffer in a main window; when a
+-- file path is present, the patch is scoped to that file.
 local function open_commit(entry)
   if not (entry and entry.hash and state.root) then
     return
   end
 
-  local res = vim.system({ "git", "-C", state.root, "show", entry.hash }):wait()
+  local cmd = { "git", "-C", state.root, "show", entry.hash }
+  local name = "gitpanel://commit/" .. entry.hash
+  if entry.path then
+    vim.list_extend(cmd, { "--", entry.path })
+    name = name .. "/" .. entry.path
+  end
+
+  local res = vim.system(cmd):wait()
   if res.code ~= 0 or not res.stdout then
     return
   end
@@ -339,12 +449,23 @@ local function open_commit(entry)
   end
 
   local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_name(buf, "gitpanel://commit/" .. entry.hash)
+  vim.api.nvim_buf_set_name(buf, name)
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(res.stdout, "\n"))
   vim.bo[buf].filetype = "git"
   vim.bo[buf].modifiable = false
   vim.bo[buf].bufhidden = "wipe"
   vim.api.nvim_win_set_buf(0, buf)
+end
+
+local function toggle_commit(hash)
+  state.commit_expanded[hash] = not state.commit_expanded[hash]
+  render_commits()
+end
+
+local function toggle_commit_dir(hash, dir)
+  local key = commit_dir_key(hash, dir)
+  state.commit_dir_expanded[key] = state.commit_dir_expanded[key] == false
+  render_commits()
 end
 
 local function toggle_fold(flag)
@@ -358,7 +479,13 @@ local function activate(key, entry)
     return
   end
   if key == "commits" then
-    open_commit(entry)
+    if entry.path then
+      open_commit(entry)
+    elseif entry.dir then
+      toggle_commit_dir(entry.hash, entry.dir)
+    elseif entry.hash then
+      toggle_commit(entry.hash)
+    end
   elseif entry.header then
     toggle_fold(entry.header)
   else
@@ -564,5 +691,9 @@ function M.setup()
     end,
   })
 end
+
+M._test = {
+  render_commit_file_tree = render_commit_file_tree,
+}
 
 return M
