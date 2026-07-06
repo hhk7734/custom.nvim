@@ -87,9 +87,10 @@ to fold or unfold its changed-file tree. Directory rows are also foldable,
 default to expanded inside an expanded commit, and use the same `<CR>` /
 double-click behavior.
 
-Selecting a file row opens `git show <hash> -- <path>` in a read-only scratch
-buffer named `gitpanel://commit/<hash>/<path>` with filetype `git`. Selecting
-another commit file replaces the previous patch buffer in the main editor area.
+Selecting a changed file row opens a side-by-side diff: the parent commit's
+version is on the left and the selected commit's version is on the right.
+Selecting an added file row opens the committed file contents directly in a
+read-only scratch buffer named `gitpanel://commit/<hash>/<path>`.
 
 ## Keyboard and Mouse
 

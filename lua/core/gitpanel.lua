@@ -122,14 +122,44 @@ local function git_log(root)
 end
 
 local function git_commit_files(root, hash)
-  local res =
-    vim.system({ "git", "-C", root, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", hash }):wait()
+  local res = vim
+    .system({
+      "git",
+      "-C",
+      root,
+      "diff-tree",
+      "--root",
+      "--no-commit-id",
+      "--name-status",
+      "-r",
+      "-z",
+      hash,
+    })
+    :wait()
   if res.code ~= 0 or not res.stdout then
     return {}
   end
+
   local files = {}
-  for _, path in ipairs(vim.split(res.stdout, "\n", { trimempty = true })) do
-    files[#files + 1] = path
+  local records = vim.split(res.stdout, "\0", { plain = true, trimempty = true })
+  local i = 1
+  while i <= #records do
+    local status = records[i]
+    i = i + 1
+    local code = status:sub(1, 1)
+    if code == "R" or code == "C" then
+      local old_path, new_path = records[i], records[i + 1]
+      i = i + 2
+      if new_path then
+        files[#files + 1] = { status = code, old_path = old_path, path = new_path }
+      end
+    else
+      local path = records[i]
+      i = i + 1
+      if path then
+        files[#files + 1] = { status = code, path = path }
+      end
+    end
   end
   return files
 end
@@ -142,10 +172,18 @@ local function new_tree_node(name, path)
   return { name = name, path = path, dirs = {}, files = {} }
 end
 
-local function build_file_tree(paths)
+local function normalize_commit_file(item)
+  if type(item) == "string" then
+    return { path = item }
+  end
+  return item
+end
+
+local function build_file_tree(files)
   local root = new_tree_node("", "")
-  for _, path in ipairs(paths) do
-    local parts = vim.split(path, "/", { plain = true, trimempty = true })
+  for _, raw in ipairs(files) do
+    local item = normalize_commit_file(raw)
+    local parts = vim.split(item.path, "/", { plain = true, trimempty = true })
     local node = root
     local prefix = {}
     for i = 1, #parts - 1 do
@@ -155,7 +193,12 @@ local function build_file_tree(paths)
       node = node.dirs[parts[i]]
     end
     if #parts > 0 then
-      node.files[#node.files + 1] = { name = parts[#parts], path = path }
+      node.files[#node.files + 1] = {
+        name = parts[#parts],
+        old_path = item.old_path,
+        path = item.path,
+        status = item.status,
+      }
     end
   end
   return root
@@ -225,7 +268,12 @@ local function render_tree_node(node, hash, dir_expanded, indent, lines, entries
   end
   for _, file in ipairs(sorted_files(node.files)) do
     lines[#lines + 1] = string.rep(" ", indent) .. tree_file_icon(file.path) .. tree_icons().icon_padding .. file.name
-    entries[#lines] = { hash = hash, path = file.path }
+    entries[#lines] = {
+      hash = hash,
+      old_path = file.old_path,
+      path = file.path,
+      status = file.status,
+    }
   end
 end
 
@@ -453,17 +501,18 @@ local function scratch_buffer(name, lines, path)
   return buf
 end
 
-local function show_change_diff(entry)
-  local root = state.root or repo_root()
-  if not root then
-    return
+local function open_scratch(name, lines, path)
+  close_diffs()
+  local win = main_win()
+  if win then
+    vim.api.nvim_set_current_win(win)
+  else
+    vim.cmd("botright vsplit")
   end
-  local repo_path = change_repo_path(entry, root)
-  local previous_spec = entry.section == "staged" and ("HEAD:" .. repo_path) or (":" .. repo_path)
-  local updated_lines = entry.section == "staged" and git_blob_lines(root, ":" .. repo_path)
-    or read_file_lines(entry.path)
-  local previous_lines = git_blob_lines(root, previous_spec) or {}
+  vim.api.nvim_win_set_buf(0, scratch_buffer(name, lines, path))
+end
 
+local function show_side_by_side(previous_name, previous_lines, updated_name, updated_lines, path)
   close_diffs()
 
   local win = main_win()
@@ -473,8 +522,8 @@ local function show_change_diff(entry)
     vim.cmd("botright vsplit")
   end
 
-  local left = scratch_buffer("gitpanel://previous/" .. repo_path, previous_lines, repo_path)
-  local right = scratch_buffer("gitpanel://updated/" .. repo_path, updated_lines or {}, repo_path)
+  local left = scratch_buffer(previous_name, previous_lines, path)
+  local right = scratch_buffer(updated_name, updated_lines or {}, path)
 
   local left_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(left_win, left)
@@ -489,6 +538,26 @@ local function show_change_diff(entry)
     vim.cmd("diffthis")
   end)
   vim.api.nvim_set_current_win(right_win)
+end
+
+local function show_change_diff(entry)
+  local root = state.root or repo_root()
+  if not root then
+    return
+  end
+  local repo_path = change_repo_path(entry, root)
+  local previous_spec = entry.section == "staged" and ("HEAD:" .. repo_path) or (":" .. repo_path)
+  local updated_lines = entry.section == "staged" and git_blob_lines(root, ":" .. repo_path)
+    or read_file_lines(entry.path)
+  local previous_lines = git_blob_lines(root, previous_spec) or {}
+
+  show_side_by_side(
+    "gitpanel://previous/" .. repo_path,
+    previous_lines,
+    "gitpanel://updated/" .. repo_path,
+    updated_lines or {},
+    repo_path
+  )
 end
 
 local function is_added_entry(entry)
@@ -518,41 +587,30 @@ local function select_entry(entry)
   render()
 end
 
--- Opens a commit patch as a read-only scratch buffer in a main window; when a
--- file path is present, the patch is scoped to that file.
-local function open_commit(entry)
-  if not (entry and entry.hash and state.root) then
+-- Opens a commit file in the main area. Added files show their committed
+-- contents directly; changed files show parent version on the left and the
+-- committed version on the right.
+local function open_commit_file(entry)
+  if not (entry and entry.hash and entry.path and state.root) then
     return
   end
 
-  local cmd = { "git", "-C", state.root, "show", entry.hash }
-  local name = "gitpanel://commit/" .. entry.hash
-  if entry.path then
-    vim.list_extend(cmd, { "--", entry.path })
-    name = name .. "/" .. entry.path
-  end
-
-  local res = vim.system(cmd):wait()
-  if res.code ~= 0 or not res.stdout then
+  local updated_lines = git_blob_lines(state.root, entry.hash .. ":" .. entry.path) or {}
+  local name = "gitpanel://commit/" .. entry.hash .. "/" .. entry.path
+  if is_added_entry(entry) then
+    open_scratch(name, updated_lines, entry.path)
     return
   end
 
-  close_diffs()
-
-  local win = main_win()
-  if win then
-    vim.api.nvim_set_current_win(win)
-  else
-    vim.cmd("botright vsplit")
-  end
-
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_name(buf, name)
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(res.stdout, "\n"))
-  vim.bo[buf].filetype = "git"
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].bufhidden = "wipe"
-  vim.api.nvim_win_set_buf(0, buf)
+  local previous_path = entry.old_path or entry.path
+  local previous_lines = git_blob_lines(state.root, entry.hash .. "^:" .. previous_path) or {}
+  show_side_by_side(
+    "gitpanel://commit-previous/" .. entry.hash .. "/" .. previous_path,
+    previous_lines,
+    "gitpanel://commit-updated/" .. entry.hash .. "/" .. entry.path,
+    updated_lines,
+    entry.path
+  )
 end
 
 local function toggle_commit(hash)
@@ -578,7 +636,7 @@ local function activate(key, entry)
   end
   if key == "commits" then
     if entry.path then
-      open_commit(entry)
+      open_commit_file(entry)
     elseif entry.dir then
       toggle_commit_dir(entry.hash, entry.dir)
     elseif entry.hash then
@@ -806,6 +864,10 @@ end
 M._test = {
   render_commit_file_tree = render_commit_file_tree,
   open_change_entry = select_entry,
+  open_commit_entry = function(root, entry)
+    state.root = root
+    open_commit_file(entry)
+  end,
 }
 
 return M
