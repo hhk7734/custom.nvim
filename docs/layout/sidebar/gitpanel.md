@@ -40,12 +40,12 @@ restores its previous height when expanded.
   ? docs/layout/sidebar/gitpanel.md
 
 ▾ Commits
-▸ 3e28d7b docs(layout): document gitpanel sidebar
-▾ 57b01ce docs(layout): move detailed layout reference
-  ▾ docs
-    ▾ layout
-      README.md
-  README.md
+ 3380b05 feat(gitpanel): make commits foldable
+ 57b01ce docs(layout): move detailed layout reference
+    docs
+      layout
+      󰂺 README.md
+  󰂺 README.md
 ```
 
 ## Changes Section
@@ -74,15 +74,16 @@ The Commits section lists recent commits as nvim-tree style foldable rows:
 
 ```text
 ▾ Commits
-▸ <hash> <title>
-▾ <hash> <title>
-  ▾ <changed dir>
-    <changed file>
+ <hash> <title>
+ <hash> <title>
+    <changed dir>
+    󰂺 <changed file>
 ```
 
-Commit rows are collapsed by default. Selecting a commit row folds or unfolds
-its changed-file tree. Directory rows are also foldable and default to expanded
-inside an expanded commit.
+Commit rows are collapsed by default. Press `<CR>` or double-click a commit row
+to fold or unfold its changed-file tree. Directory rows are also foldable,
+default to expanded inside an expanded commit, and use the same `<CR>` /
+double-click behavior.
 
 Selecting a file row opens `git show <hash> -- <path>` in a read-only scratch
 buffer named `gitpanel://commit/<hash>/<path>` with filetype `git`. Selecting
@@ -92,15 +93,18 @@ another commit file replaces the previous patch buffer in the main editor area.
 
 When focus is inside either section:
 
-| Key    | Action                    |
-| ------ | ------------------------- |
-| `<CR>` | Activate the current row. |
-| `R`    | Refresh both sections.    |
-| `q`    | Close the sidebar.        |
+| Key / mouse        | Action                    |
+| ------------------ | ------------------------- |
+| `<CR>`             | Activate the current row. |
+| Double-click a row | Activate the clicked row. |
+| Single-click a row | Focus/select the row.     |
+| `R`                | Refresh both sections.    |
+| `q`                | Close the sidebar.        |
 
-Mouse clicks are routed through the activity bar's global click dispatcher so
-clicks outside the panel continue to reach the rest of the UI. Blank rows focus
-the section for keyboard navigation.
+Single clicks are routed through the activity bar's global click dispatcher so
+clicks outside the panel continue to reach the rest of the UI. Double-clicks use
+a buffer-local mapping, matching nvim-tree's open/toggle behavior. Blank rows
+focus the section for keyboard navigation.
 
 ## Refresh Behavior
 

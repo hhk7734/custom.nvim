@@ -16,10 +16,10 @@ local lines, entries = test.render_commit_file_tree(
 )
 
 local expected = {
-  "  ▾ lua",
-  "    ▾ core",
-  "      gitpanel.lua",
-  "  README.md",
+  "    lua",
+  "      core",
+  "       gitpanel.lua",
+  "   README.md",
 }
 
 assert(vim.deep_equal(lines, expected), vim.inspect(lines))
@@ -41,8 +41,8 @@ local collapsed_lines, collapsed_entries = test.render_commit_file_tree(
 
 assert(
   vim.deep_equal(collapsed_lines, {
-    "  ▸ lua",
-    "  README.md",
+    "    lua",
+    "   README.md",
   }),
   vim.inspect(collapsed_lines)
 )

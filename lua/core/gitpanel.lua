@@ -176,18 +176,55 @@ local function sorted_files(files)
   return files
 end
 
+local function tree_icons()
+  local ok, config = pcall(require, "nvim-tree.config")
+  local renderer = ok and ((config.g and config.g.renderer) or (config.d and config.d.renderer)) or nil
+  local icons = renderer and renderer.icons or {}
+  local glyphs = icons.glyphs or {}
+  local folder = glyphs.folder or {}
+  local padding = icons.padding or {}
+  return {
+    arrow_closed = folder.arrow_closed or "",
+    arrow_open = folder.arrow_open or "",
+    file_default = glyphs.default or "",
+    folder_default = folder.default or "",
+    folder_open = folder.open or "",
+    icon_padding = padding.icon or " ",
+    folder_arrow_padding = padding.folder_arrow or " ",
+  }
+end
+
+local function tree_arrow(expanded)
+  local icons = tree_icons()
+  return (expanded and icons.arrow_open or icons.arrow_closed) .. icons.folder_arrow_padding
+end
+
+local function tree_folder_icon(expanded)
+  local icons = tree_icons()
+  return expanded and icons.folder_open or icons.folder_default
+end
+
+local function tree_file_icon(path)
+  local ok, icon = pcall(function()
+    local devicons = require("nvim-web-devicons")
+    return devicons.get_icon(vim.fn.fnamemodify(path, ":t"), vim.fn.fnamemodify(path, ":e"), { default = true })
+  end)
+  return (ok and icon) or tree_icons().file_default
+end
+
 local function render_tree_node(node, hash, dir_expanded, indent, lines, entries)
   for _, dir in ipairs(sorted_dirs(node.dirs)) do
     local expanded = dir_expanded[commit_dir_key(hash, dir.path)] ~= false
-    local marker = expanded and "▾" or "▸"
-    lines[#lines + 1] = string.rep(" ", indent) .. marker .. " " .. dir.name
+    local arrow = tree_arrow(expanded)
+    local icon = tree_folder_icon(expanded)
+    lines[#lines + 1] = string.rep(" ", indent) .. arrow .. icon .. tree_icons().icon_padding .. dir.name
     entries[#lines] = { hash = hash, dir = dir.path }
     if expanded then
       render_tree_node(dir, hash, dir_expanded, indent + 2, lines, entries)
     end
   end
   for _, file in ipairs(sorted_files(node.files)) do
-    lines[#lines + 1] = string.rep(" ", indent) .. file.name
+    lines[#lines + 1] = string.rep(" ", indent) .. tree_file_icon(file.path) .. tree_icons().icon_padding .. file.name
     entries[#lines] = { hash = hash, path = file.path }
   end
 end
@@ -309,8 +346,8 @@ local function render_commits()
     lines = { "Not a git repository" }
   else
     for _, c in ipairs(git_log(root)) do
-      local marker = state.commit_expanded[c.hash] and "▾" or "▸"
-      table.insert(lines, string.format("%s %s %s", marker, c.hash, c.subject))
+      local marker = tree_arrow(state.commit_expanded[c.hash])
+      table.insert(lines, string.format("%s%s %s", marker, c.hash, c.subject))
       entries[#lines] = { hash = c.hash }
       local hash_start = lines[#lines]:find(c.hash, 1, true) - 1
       marks[#lines] = { col = hash_start, end_col = hash_start + #c.hash, hl = "Identifier" }
@@ -326,9 +363,10 @@ local function render_commits()
             table.insert(lines, line)
             entries[#lines] = tree_entries[i]
             if tree_entries[i].dir then
-              local marker_start = line:find("▾", 1, true) or line:find("▸", 1, true)
-              if marker_start then
-                marks[#lines] = { col = marker_start - 1, end_col = marker_start + 2, hl = "Title" }
+              local icons = tree_icons()
+              local arrow_start = line:find(icons.arrow_open, 1, true) or line:find(icons.arrow_closed, 1, true)
+              if arrow_start then
+                marks[#lines] = { col = arrow_start - 1, end_col = arrow_start + #icons.arrow_open, hl = "Title" }
               end
             end
           end
@@ -518,18 +556,23 @@ function M.click(pos)
           return
         end
         pcall(vim.api.nvim_win_set_cursor, s.win, { pos.line, 0 })
-        local entry = s.lines[pos.line]
-        if entry then
-          activate(section.key, entry)
-        else
-          -- Blank row: just focus the panel for keyboard navigation.
-          vim.api.nvim_set_current_win(s.win)
-        end
+        -- Nvim-tree style: a single click focuses/selects the row; <CR> or
+        -- double-click performs the row action.
+        vim.api.nvim_set_current_win(s.win)
       end)
       return true
     end
   end
   return false
+end
+
+local function double_click_current(key)
+  local pos = vim.fn.getmousepos()
+  local s = state.sections[key]
+  if section_valid(s) and pos.winid == s.win and pos.line > 0 then
+    pcall(vim.api.nvim_win_set_cursor, s.win, { pos.line, 0 })
+  end
+  select_current(key)
 end
 
 -- Collapse a section to its winbar header; expanding restores the height
@@ -576,6 +619,9 @@ local function setup_buffer(key)
   vim.keymap.set("n", "<CR>", function()
     select_current(key)
   end, vim.tbl_extend("force", opts, { desc = "git panel: select" }))
+  vim.keymap.set("n", "<2-LeftMouse>", function()
+    double_click_current(key)
+  end, vim.tbl_extend("force", opts, { desc = "git panel: double-click select" }))
   vim.keymap.set("n", "q", M.close, vim.tbl_extend("force", opts, { desc = "git panel: close" }))
   vim.keymap.set("n", "R", render, vim.tbl_extend("force", opts, { desc = "git panel: refresh" }))
   return buf
