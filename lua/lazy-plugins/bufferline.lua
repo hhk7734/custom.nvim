@@ -39,6 +39,13 @@ return {
     options = {
       -- Show open buffers as tabs (VS Code / Sublime style).
       mode = "buffers",
+      name_formatter = function(buf)
+        local bufnr = buf.id or buf.bufnr
+        if bufnr and vim.b[bufnr].gitpanel_tab_label then
+          return vim.b[bufnr].gitpanel_tab_label
+        end
+        return nil
+      end,
       diagnostics = "nvim_lsp",
       show_buffer_close_icons = true,
       show_close_icon = false,

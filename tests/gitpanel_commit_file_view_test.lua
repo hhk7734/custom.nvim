@@ -40,6 +40,16 @@ local function listed_no_name_buffers()
   return buffers
 end
 
+local function count_gitpanel_tab_label(label)
+  local count = 0
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[buf].buflisted and vim.b[buf].gitpanel_tab_label == label then
+      count = count + 1
+    end
+  end
+  return count
+end
+
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, "p")
 run({ "git", "init" }, root)
@@ -57,6 +67,7 @@ vim.fn.writefile({ "added" }, root .. "/added.txt")
 run({ "git", "add", "changed.txt", "second.txt", "added.txt" }, root)
 run({ "git", "commit", "-m", "update files" }, root)
 local hash = vim.trim(run({ "git", "rev-parse", "--short", "HEAD" }, root).stdout)
+local parent_hash = vim.trim(run({ "git", "rev-parse", "--short=7", hash .. "^" }, root).stdout)
 
 vim.cmd("enew")
 vim.fn.chdir(root)
@@ -127,12 +138,16 @@ end
 assert(changed_line, vim.inspect(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)))
 assert(second_line, vim.inspect(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)))
 local initial_no_name_count = #listed_no_name_buffers()
+local changed_label = "changed.txt (" .. parent_hash .. ") -> changed.txt (" .. hash .. ")"
+local second_label = "second.txt (" .. parent_hash .. ") -> second.txt (" .. hash .. ")"
 
 gitpanel.click({ winid = commits_win, winrow = changed_line + 1, line = changed_line })
 local clicked_diff = vim.wait(1000, function()
   return #diff_windows() == 2
 end, 20)
 assert(clicked_diff, "clicking a changed commit file should open a side-by-side diff")
+assert(vim.b[vim.api.nvim_get_current_buf()].gitpanel_tab_label == changed_label)
+assert(count_gitpanel_tab_label(changed_label) == 1, "first commit diff tab should be listed once")
 assert(
   vim.api.nvim_win_get_width(commits_win) == sidebar_width,
   "sidebar width changed after first commit diff selection"
@@ -149,6 +164,9 @@ local replaced_diff = vim.wait(1000, function()
   return vim.deep_equal(left, { "old-second" }) and vim.deep_equal(right, { "new-second" })
 end, 20)
 assert(replaced_diff, "selecting another commit file should replace the existing two-pane diff")
+assert(vim.b[vim.api.nvim_get_current_buf()].gitpanel_tab_label == second_label)
+assert(count_gitpanel_tab_label(changed_label) == 1, "first commit diff tab should remain listed once")
+assert(count_gitpanel_tab_label(second_label) == 1, "second commit diff tab should be listed once")
 assert(
   vim.api.nvim_win_get_width(commits_win) == sidebar_width,
   "sidebar width changed after replacing commit diff selection"
@@ -169,6 +187,9 @@ local restored_diff = vim.wait(1000, function()
   return vim.deep_equal(left, { "old" }) and vim.deep_equal(right, { "new" })
 end, 20)
 assert(restored_diff, "selecting the first commit file again should replace the existing two-pane diff")
+assert(vim.b[vim.api.nvim_get_current_buf()].gitpanel_tab_label == changed_label)
+assert(count_gitpanel_tab_label(changed_label) == 1, "reselected first commit diff tab should not duplicate")
+assert(count_gitpanel_tab_label(second_label) == 1, "second commit diff tab should remain listed once")
 assert(
   vim.api.nvim_win_get_width(commits_win) == sidebar_width,
   "sidebar width changed after third commit diff selection"

@@ -30,6 +30,16 @@ local function listed_no_name_buffers()
   return buffers
 end
 
+local function count_gitpanel_tab_label(label)
+  local count = 0
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[buf].buflisted and vim.b[buf].gitpanel_tab_label == label then
+      count = count + 1
+    end
+  end
+  return count
+end
+
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, "p")
 run({ "git", "init" }, root)
@@ -122,6 +132,8 @@ end
 assert(changed_line, vim.inspect(rendered_changes))
 assert(second_line, vim.inspect(rendered_changes))
 local initial_no_name_count = #listed_no_name_buffers()
+local changed_label = "changed.txt (index) -> changed.txt (worktree)"
+local second_label = "second.txt (index) -> second.txt (worktree)"
 local has_added = false
 local has_deleted = false
 for _, line in ipairs(rendered_changes) do
@@ -139,6 +151,8 @@ local clicked_diff = vim.wait(1000, function()
   return #wins == 2
 end, 20)
 assert(clicked_diff, "single-clicking a changed file should open a side-by-side diff")
+assert(vim.b[vim.api.nvim_get_current_buf()].gitpanel_tab_label == changed_label)
+assert(count_gitpanel_tab_label(changed_label) == 1, "first changed diff tab should be listed once")
 assert(vim.api.nvim_win_get_width(changes_win) == sidebar_width, "sidebar width changed after first diff selection")
 
 gitpanel.click({ winid = changes_win, winrow = second_line + 1, line = second_line })
@@ -152,6 +166,9 @@ local replaced_diff = vim.wait(1000, function()
   return vim.deep_equal(left, { "old-second" }) and vim.deep_equal(right, { "new-second" })
 end, 20)
 assert(replaced_diff, "selecting another changed file should replace the existing two-pane diff")
+assert(vim.b[vim.api.nvim_get_current_buf()].gitpanel_tab_label == second_label)
+assert(count_gitpanel_tab_label(changed_label) == 1, "first changed diff tab should remain listed once")
+assert(count_gitpanel_tab_label(second_label) == 1, "second changed diff tab should be listed once")
 assert(vim.api.nvim_win_get_width(changes_win) == sidebar_width, "sidebar width changed after replacing diff selection")
 assert(
   #listed_no_name_buffers() == initial_no_name_count,
@@ -169,6 +186,9 @@ local restored_diff = vim.wait(1000, function()
   return vim.deep_equal(left, { "old" }) and vim.deep_equal(right, { "new" })
 end, 20)
 assert(restored_diff, "selecting the first changed file again should replace the existing two-pane diff")
+assert(vim.b[vim.api.nvim_get_current_buf()].gitpanel_tab_label == changed_label)
+assert(count_gitpanel_tab_label(changed_label) == 1, "reselected first changed diff tab should not duplicate")
+assert(count_gitpanel_tab_label(second_label) == 1, "second changed diff tab should remain listed once")
 assert(vim.api.nvim_win_get_width(changes_win) == sidebar_width, "sidebar width changed after third diff selection")
 assert(
   #listed_no_name_buffers() == initial_no_name_count,

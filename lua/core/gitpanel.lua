@@ -532,30 +532,64 @@ local function read_file_lines(path)
   return ok and lines or {}
 end
 
-local function scratch_buffer(name, lines, path)
-  local buf = vim.api.nvim_create_buf(false, true)
-  vim.api.nvim_buf_set_name(buf, name)
+local function buffer_by_name(name)
+  local bufnr = vim.fn.bufnr(name)
+  if bufnr > 0 and vim.api.nvim_buf_is_valid(bufnr) then
+    return bufnr
+  end
+  return nil
+end
+
+local function short_rev(root, rev)
+  local res = vim.system({ "git", "-C", root, "rev-parse", "--short=7", rev }):wait()
+  if res.code ~= 0 or not res.stdout then
+    return nil
+  end
+  return vim.trim(res.stdout)
+end
+
+local function file_rev_label(path, rev)
+  return string.format("%s (%s)", vim.fn.fnamemodify(path, ":t"), rev)
+end
+
+local function diff_tab_label(previous_path, previous_rev, updated_path, updated_rev)
+  return file_rev_label(previous_path, previous_rev) .. " -> " .. file_rev_label(updated_path, updated_rev)
+end
+
+local function scratch_buffer(name, lines, path, opts)
+  opts = opts or {}
+  local buf = buffer_by_name(name)
+  if not buf then
+    buf = vim.api.nvim_create_buf(opts.listed ~= false, true)
+    vim.api.nvim_buf_set_name(buf, name)
+  end
+
+  vim.bo[buf].buflisted = opts.listed ~= false
+  vim.b[buf].gitpanel_label = opts.label
+  vim.b[buf].gitpanel_tab_label = opts.tab_label or opts.label
+  vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
   local ft = vim.filetype.match({ filename = path })
   if ft then
     vim.bo[buf].filetype = ft
   end
   vim.bo[buf].modifiable = false
-  vim.bo[buf].bufhidden = "wipe"
+  vim.bo[buf].bufhidden = opts.bufhidden or "hide"
   return buf
 end
 
-local function open_scratch(name, lines, path)
+local function open_scratch(name, lines, path, opts)
   local win = close_diffs(true) or main_win()
   if win then
     vim.api.nvim_set_current_win(win)
   else
     vim.cmd("botright vsplit")
   end
-  vim.api.nvim_win_set_buf(0, scratch_buffer(name, lines, path))
+  vim.api.nvim_win_set_buf(0, scratch_buffer(name, lines, path, opts))
 end
 
-local function show_side_by_side(previous_name, previous_lines, updated_name, updated_lines, path)
+local function show_side_by_side(previous_name, previous_lines, updated_name, updated_lines, path, opts)
+  opts = opts or {}
   local win = close_diffs(true) or main_win()
   if win then
     vim.api.nvim_set_current_win(win)
@@ -563,8 +597,16 @@ local function show_side_by_side(previous_name, previous_lines, updated_name, up
     vim.cmd("botright vsplit")
   end
 
-  local left = scratch_buffer(previous_name, previous_lines, path)
-  local right = scratch_buffer(updated_name, updated_lines or {}, path)
+  local left = scratch_buffer(previous_name, previous_lines, path, {
+    label = opts.previous_label,
+    listed = false,
+    tab_label = opts.tab_label,
+  })
+  local right = scratch_buffer(updated_name, updated_lines or {}, path, {
+    label = opts.updated_label,
+    listed = true,
+    tab_label = opts.tab_label,
+  })
 
   local left_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(left_win, left)
@@ -593,12 +635,19 @@ local function show_change_diff(entry)
     or read_file_lines(entry.path)
   local previous_lines = git_blob_lines(root, previous_spec) or {}
 
+  local previous_ref = entry.section == "staged" and (short_rev(root, "HEAD") or "HEAD") or "index"
+  local updated_ref = entry.section == "staged" and "index" or "worktree"
   show_side_by_side(
     "gitpanel://previous/" .. repo_path,
     previous_lines,
     "gitpanel://updated/" .. repo_path,
     updated_lines or {},
-    repo_path
+    repo_path,
+    {
+      previous_label = file_rev_label(repo_path, previous_ref),
+      updated_label = file_rev_label(repo_path, updated_ref),
+      tab_label = diff_tab_label(repo_path, previous_ref, repo_path, updated_ref),
+    }
   )
 end
 
@@ -638,18 +687,27 @@ local function open_commit_file(entry)
   local updated_lines = git_blob_lines(state.root, entry.hash .. ":" .. entry.path) or {}
   local name = "gitpanel://commit/" .. entry.hash .. "/" .. entry.path
   if is_added_entry(entry) then
-    open_scratch(name, updated_lines, entry.path)
+    open_scratch(name, updated_lines, entry.path, {
+      label = file_rev_label(entry.path, short_rev(state.root, entry.hash) or entry.hash:sub(1, 7)),
+    })
     return
   end
 
   local previous_path = entry.old_path or entry.path
   local previous_lines = git_blob_lines(state.root, entry.hash .. "^:" .. previous_path) or {}
+  local previous_ref = short_rev(state.root, entry.hash .. "^") or "root"
+  local updated_ref = short_rev(state.root, entry.hash) or entry.hash:sub(1, 7)
   show_side_by_side(
     "gitpanel://commit-previous/" .. entry.hash .. "/" .. previous_path,
     previous_lines,
     "gitpanel://commit-updated/" .. entry.hash .. "/" .. entry.path,
     updated_lines,
-    entry.path
+    entry.path,
+    {
+      previous_label = file_rev_label(previous_path, previous_ref),
+      updated_label = file_rev_label(entry.path, updated_ref),
+      tab_label = diff_tab_label(previous_path, previous_ref, entry.path, updated_ref),
+    }
   )
 end
 
