@@ -7,6 +7,7 @@
 local M = {}
 
 local tree_renderer = require("core.sidebar.tree_renderer")
+local resize_handle = require("core.sidebar.resize_handle")
 
 local WIDTH = 30
 -- Commits section's share of the sidebar column when the panel opens.
@@ -1118,6 +1119,7 @@ local function style_window(win, idx)
   wo.wrap = false
   wo.fillchars = "eob: "
   wo.winbar = winbar_for(idx)
+  resize_handle.style_window(win)
 end
 
 function M.open()

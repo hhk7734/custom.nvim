@@ -33,6 +33,8 @@ return {
   },
 
   config = function(_, opts)
+    local resize_handle = require("core.sidebar.resize_handle")
+
     -- disable netrw at the very start of your init.lua
     vim.g.loaded_netrw = 1
     vim.g.loaded_netrwPlugin = 1
@@ -63,6 +65,17 @@ return {
       end
       return count
     end
+
+    vim.api.nvim_create_autocmd("FileType", {
+      pattern = "NvimTree",
+      callback = function(args)
+        vim.schedule(function()
+          for _, winId in ipairs(vim.fn.win_findbuf(args.buf)) do
+            resize_handle.style_window(winId)
+          end
+        end)
+      end,
+    })
 
     -- close vim if nvim-tree is the last window
     vim.api.nvim_create_autocmd({ "BufEnter", "QuitPre" }, {

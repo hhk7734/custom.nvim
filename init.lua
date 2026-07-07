@@ -13,6 +13,7 @@ vim.g.maplocalleader = "\\"
 require("core.keymap")
 require("core.opt")
 require("config.lazy")
+require("core.sidebar.resize_handle").setup()
 require("core.activitybar").setup()
 require("core.gitpanel").setup()
 require("core.panel").setup()
