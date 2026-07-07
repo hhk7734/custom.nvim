@@ -40,6 +40,7 @@ local state = {
   root = nil,
   diff_pair_autocmd = false,
   closing_diff_pairs = {},
+  quitting_from_commit_diff = false,
 }
 
 local function section_valid(s)
@@ -476,11 +477,14 @@ local function render()
   refresh_winbars()
 end
 
+local function is_gitpanel_commit_diff_view(name)
+  return vim.startswith(name, "gitpanel://commit-previous/") or vim.startswith(name, "gitpanel://commit-updated/")
+end
+
 local function is_gitpanel_diff_view(name)
   return vim.startswith(name, "gitpanel://previous/")
     or vim.startswith(name, "gitpanel://updated/")
-    or vim.startswith(name, "gitpanel://commit-previous/")
-    or vim.startswith(name, "gitpanel://commit-updated/")
+    or is_gitpanel_commit_diff_view(name)
 end
 
 -- Wipes previous diff state before opening another selection. When `keep_one`
@@ -684,6 +688,22 @@ local function ensure_diff_pair_autocmd()
   state.diff_pair_autocmd = true
 
   local group = vim.api.nvim_create_augroup("gitpanel-diff-pairs", { clear = true })
+  vim.api.nvim_create_autocmd("QuitPre", {
+    group = group,
+    callback = function()
+      if state.quitting_from_commit_diff or not is_gitpanel_commit_diff_view(vim.api.nvim_buf_get_name(0)) then
+        return
+      end
+
+      state.quitting_from_commit_diff = true
+      local command = vim.v.cmdbang == 1 and "qall!" or "qall"
+      local ok, err = pcall(vim.cmd, command)
+      if not ok then
+        state.quitting_from_commit_diff = false
+        error(err)
+      end
+    end,
+  })
   vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
     group = group,
     callback = function(args)
