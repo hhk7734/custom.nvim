@@ -618,7 +618,14 @@ local function has_non_pair_editor_window(buf, pair_buf)
 end
 
 local function fallback_editor_buffer(buf, pair_buf)
-  local pair = { [buf] = true, [pair_buf] = true }
+  local pair = {}
+  if buf then
+    pair[buf] = true
+  end
+  if pair_buf then
+    pair[pair_buf] = true
+  end
+
   for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
     if
       not pair[candidate]
@@ -631,6 +638,46 @@ local function fallback_editor_buffer(buf, pair_buf)
   end
 
   return vim.api.nvim_create_buf(true, false)
+end
+
+local function editor_window_exists()
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if not SIDEBAR_FTS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+      return true
+    end
+  end
+  return false
+end
+
+local function restore_editor_window_if_missing()
+  if state.quitting_from_commit_diff or vim.v.dying > 0 or editor_window_exists() then
+    return
+  end
+
+  local anchor_win = nil
+  for _, s in pairs(state.sections) do
+    if section_valid(s) then
+      anchor_win = s.win
+      break
+    end
+  end
+  anchor_win = anchor_win or vim.api.nvim_get_current_win()
+
+  if not vim.api.nvim_win_is_valid(anchor_win) then
+    return
+  end
+
+  vim.api.nvim_set_current_win(anchor_win)
+  vim.cmd("botright vertical split")
+  local editor_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(editor_win, fallback_editor_buffer())
+  vim.wo[editor_win].diff = false
+
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "gitpanel" then
+      pcall(vim.api.nvim_win_set_width, win, WIDTH)
+    end
+  end
 end
 
 local function preserve_editor_window_if_last(buf, pair_buf)
@@ -710,6 +757,14 @@ local function ensure_diff_pair_autocmd()
       local ok, pair_buf = pcall(vim.api.nvim_buf_get_var, args.buf, "gitpanel_diff_pair_buf")
       if ok then
         close_diff_pair(args.buf, pair_buf)
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd("BufWinLeave", {
+    group = group,
+    callback = function(args)
+      if is_gitpanel_diff_view(vim.api.nvim_buf_get_name(args.buf)) then
+        vim.schedule(restore_editor_window_if_missing)
       end
     end,
   })

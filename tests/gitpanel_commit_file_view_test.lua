@@ -259,3 +259,17 @@ assert(
   "sidebar width changed after closing visible commit diff pair"
 )
 assert(not vim.wo[editor_windows()[1]].diff, "remaining editor window should not stay in diff mode")
+
+assert(gitpanel.show_diff_pair(second_tab), "selecting the last commit diff tab should restore its two-pane diff")
+local restored_last_tab = vim.wait(1000, function()
+  return #editor_windows() == 2
+end, 20)
+assert(restored_last_tab, "last commit diff tab should restore before close-window regression")
+vim.cmd("close")
+assert(#editor_windows() == 1, "closing one side of the last commit diff should leave the other side visible")
+vim.cmd("close")
+local preserved_editor_after_last_close = vim.wait(1000, function()
+  local wins = editor_windows()
+  return #wins == 1 and vim.api.nvim_win_get_width(commits_win) == sidebar_width and not vim.wo[wins[1]].diff
+end, 20)
+assert(preserved_editor_after_last_close, "closing the last commit diff window should preserve an editor window")
