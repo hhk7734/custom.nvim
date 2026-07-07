@@ -1,7 +1,7 @@
 local M = {}
 
 M.HIGHLIGHT_FG = 0x58a6ff
-M.INDICATOR = "┃"
+M.HORIZONTAL = "━"
 local HIGHLIGHT_FG_HEX = "#58a6ff"
 
 local function merged_winhighlight(current)
@@ -23,6 +23,35 @@ local function merged_winhighlight(current)
   return table.concat(parts, ",")
 end
 
+local function merged_fillchars(current)
+  local replacements = {
+    horiz = M.HORIZONTAL,
+    horizup = "┻",
+    horizdown = "┳",
+    verthoriz = "╋",
+  }
+  local parts = {}
+  local seen = {}
+
+  for part in tostring(current or ""):gmatch("[^,]+") do
+    local key = part:match("^%s*([^:]+):")
+    if key and replacements[key] then
+      parts[#parts + 1] = key .. ":" .. replacements[key]
+      seen[key] = true
+    elseif part ~= "" then
+      parts[#parts + 1] = part
+    end
+  end
+
+  for _, key in ipairs({ "horiz", "horizup", "horizdown", "verthoriz" }) do
+    if not seen[key] then
+      parts[#parts + 1] = key .. ":" .. replacements[key]
+    end
+  end
+
+  return table.concat(parts, ",")
+end
+
 function M.apply_highlights()
   vim.api.nvim_set_hl(0, "SidebarResizeHandle", { fg = HIGHLIGHT_FG_HEX, bold = true })
 end
@@ -31,26 +60,9 @@ function M.style_window(win)
   vim.wo[win].winhighlight = merged_winhighlight(vim.wo[win].winhighlight)
 end
 
-function M.line_mark(line)
-  return {
-    line = line,
-    col = 0,
-    virt_text = { { M.INDICATOR, "SidebarResizeHandle" } },
-    virt_text_pos = "right_align",
-  }
-end
-
-function M.add_line_marks(marks, line_count)
-  local index = 0
-  for key in pairs(marks) do
-    if type(key) == "number" and key > index then
-      index = key
-    end
-  end
-  for line = 1, line_count do
-    index = index + 1
-    marks[index] = M.line_mark(line)
-  end
+function M.style_section_window(win)
+  M.style_window(win)
+  vim.wo[win].fillchars = merged_fillchars(vim.wo[win].fillchars)
 end
 
 function M.setup()

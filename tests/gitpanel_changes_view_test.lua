@@ -1,7 +1,6 @@
 vim.opt.runtimepath:append(vim.fn.getcwd())
 
 local gitpanel = require("core.gitpanel")
-local resize_handle = require("core.sidebar.resize_handle")
 local test = assert(gitpanel._test, "gitpanel test helpers are exposed")
 
 local function run(cmd, cwd)
@@ -60,22 +59,14 @@ local function listed_gitpanel_buffer_with_label(label)
   return nil
 end
 
-local function has_changes_resize_handle(buf, row)
+local function has_sidebar_resize_virtual_text(buf)
   for _, mark in
     ipairs(vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_get_namespaces().gitpanel, 0, -1, {
       details = true,
     }))
   do
     local details = mark[4]
-    if
-      mark[2] == row
-      and details
-      and details.virt_text_pos == "right_align"
-      and details.virt_text
-      and details.virt_text[1]
-      and details.virt_text[1][1] == resize_handle.INDICATOR
-      and details.virt_text[1][2] == "SidebarResizeHandle"
-    then
+    if details and details.virt_text and vim.inspect(details.virt_text):find("SidebarResizeHandle", 1, true) then
       return true
     end
   end
@@ -150,23 +141,32 @@ gitpanel.setup()
 gitpanel.open()
 
 local changes_win
+local commits_win
 for _, win in ipairs(vim.api.nvim_list_wins()) do
   local winbar = vim.wo[win].winbar
   if winbar and winbar:find("Changes", 1, true) then
     changes_win = win
-    break
+  elseif winbar and winbar:find("Commits", 1, true) then
+    commits_win = win
   end
 end
 assert(changes_win, "changes window exists")
+assert(commits_win, "commits window exists")
 local sidebar_width = vim.api.nvim_win_get_width(changes_win)
 
 local changes_buf = vim.api.nvim_win_get_buf(changes_win)
 assert(vim.wo[changes_win].winbar:find(" Changes", 1, true), vim.wo[changes_win].winbar)
+assert(
+  vim.wo[changes_win].fillchars:find("horiz:━", 1, true),
+  "Changes window missing horizontal resize handle fillchar: " .. vim.wo[changes_win].fillchars
+)
+assert(
+  vim.wo[commits_win].fillchars:find("horiz:━", 1, true),
+  "Commits window missing horizontal resize handle fillchar: " .. vim.wo[commits_win].fillchars
+)
 local rendered_changes = vim.api.nvim_buf_get_lines(changes_buf, 0, -1, false)
 assert(#rendered_changes > 0, vim.inspect(rendered_changes))
-for row = 0, #rendered_changes - 1 do
-  assert(has_changes_resize_handle(changes_buf, row), "changes row missing resize handle: " .. (row + 1))
-end
+assert(not has_sidebar_resize_virtual_text(changes_buf), "Changes body should not render per-row resize handles")
 assert(rendered_changes[1] == "  Staged Changes", vim.inspect(rendered_changes))
 local saw_changes_group = false
 local changed_line
