@@ -1,10 +1,12 @@
 -- VSCode-style "Source Control" sidebar: two stacked, foldable, resizable
--- sections — Changes (git status; Staged/Changes foldable sub-lists;
--- selecting a file diffs it with gitsigns) and Commits (recent history;
--- selecting a commit opens its patch). Not a plugin; mirrors
--- activitybar.lua's structure (state table, local helpers, M.open/close/
--- toggle/setup).
+-- sections — Changes (git status; Staged Changes/Changes foldable sub-lists;
+-- selecting a file opens its contents or a side-by-side diff) and Commits
+-- (recent history; selecting a commit file opens its contents or a diff). Not a
+-- plugin; mirrors activitybar.lua's structure (state table, local helpers,
+-- M.open/close/toggle/setup).
 local M = {}
+
+local tree_renderer = require("core.sidebar.tree_renderer")
 
 local WIDTH = 30
 -- Commits section's share of the sidebar column when the panel opens.
@@ -185,127 +187,149 @@ local function normalize_commit_file(item)
   return item
 end
 
-local function build_file_tree(files)
-  local root = new_tree_node("", "")
-  for _, raw in ipairs(files) do
-    local item = normalize_commit_file(raw)
-    local parts = vim.split(item.path, "/", { plain = true, trimempty = true })
-    local node = root
-    local prefix = {}
-    for i = 1, #parts - 1 do
-      prefix[#prefix + 1] = parts[i]
-      local dir_path = table.concat(prefix, "/")
-      node.dirs[parts[i]] = node.dirs[parts[i]] or new_tree_node(parts[i], dir_path)
-      node = node.dirs[parts[i]]
-    end
-    if #parts > 0 then
-      node.files[#node.files + 1] = {
-        name = parts[#parts],
-        old_path = item.old_path,
-        path = item.path,
-        status = item.status,
-        untracked = item.untracked,
-      }
-    end
-  end
-  return root
-end
-
-local function sorted_dirs(dirs)
-  local out = vim.tbl_values(dirs)
-  table.sort(out, function(a, b)
-    return a.name < b.name
-  end)
-  return out
-end
-
-local function sorted_files(files)
-  table.sort(files, function(a, b)
-    return a.name < b.name
-  end)
-  return files
-end
-
-local function tree_icons()
-  local ok, config = pcall(require, "nvim-tree.config")
-  local renderer = ok and ((config.g and config.g.renderer) or (config.d and config.d.renderer)) or nil
-  local icons = renderer and renderer.icons or {}
-  local glyphs = icons.glyphs or {}
-  local folder = glyphs.folder or {}
-  local padding = icons.padding or {}
-  return {
-    arrow_closed = folder.arrow_closed or "",
-    arrow_open = folder.arrow_open or "",
-    file_default = glyphs.default or "",
-    folder_default = folder.default or "",
-    folder_open = folder.open or "",
-    icon_padding = padding.icon or " ",
-    folder_arrow_padding = padding.folder_arrow or " ",
-  }
-end
-
 local function tree_arrow(expanded)
-  local icons = tree_icons()
-  return (expanded and icons.arrow_open or icons.arrow_closed) .. icons.folder_arrow_padding
+  return tree_renderer.folder_arrow(expanded).str
 end
 
 local function tree_folder_icon(expanded)
-  local icons = tree_icons()
-  return expanded and icons.folder_open or icons.folder_default
+  return tree_renderer.folder_icon(expanded).str
 end
 
-local function tree_file_icon(path)
-  local ok, icon = pcall(function()
-    local devicons = require("nvim-web-devicons")
-    return devicons.get_icon(vim.fn.fnamemodify(path, ":t"), vim.fn.fnamemodify(path, ":e"), { default = true })
-  end)
-  return (ok and icon) or tree_icons().file_default
+local function git_glyphs()
+  local ok, config = pcall(require, "nvim-tree.config")
+  local renderer = ok and ((config.g and config.g.renderer) or (config.d and config.d.renderer)) or nil
+  local git = renderer and renderer.icons and renderer.icons.glyphs and renderer.icons.glyphs.git or {}
+  return {
+    staged = git.staged or "✓",
+    unstaged = git.unstaged or "✗",
+    unmerged = git.unmerged or "",
+    renamed = git.renamed or "➜",
+    untracked = git.untracked or "★",
+    deleted = git.deleted or "",
+    ignored = git.ignored or "◌",
+  }
 end
 
-local function render_tree_node(node, hash, dir_expanded, indent, lines, entries)
-  for _, dir in ipairs(sorted_dirs(node.dirs)) do
-    local expanded = dir_expanded[commit_dir_key(hash, dir.path)] ~= false
-    local arrow = tree_arrow(expanded)
-    local icon = tree_folder_icon(expanded)
-    lines[#lines + 1] = string.rep(" ", indent) .. arrow .. icon .. tree_icons().icon_padding .. dir.name
-    entries[#lines] = { hash = hash, dir = dir.path }
-    if expanded then
-      render_tree_node(dir, hash, dir_expanded, indent + 2, lines, entries)
+local function git_status_kind(status, untracked, section)
+  if untracked or status == "?" then
+    return "untracked"
+  elseif status == "A" then
+    return section == "changes" and "untracked" or "staged"
+  elseif status == "D" then
+    return "deleted"
+  elseif status == "R" then
+    return "renamed"
+  elseif status == "U" then
+    return "unmerged"
+  elseif section == "staged" then
+    return "staged"
+  elseif status then
+    return "unstaged"
+  end
+  return nil
+end
+
+local function git_status_icon(kind)
+  if not kind then
+    return nil
+  end
+
+  local glyphs = git_glyphs()
+  local groups = {
+    staged = "NvimTreeGitStagedIcon",
+    unstaged = "NvimTreeGitDirtyIcon",
+    unmerged = "NvimTreeGitMergeIcon",
+    renamed = "NvimTreeGitRenamedIcon",
+    untracked = "NvimTreeGitNewIcon",
+    deleted = "NvimTreeGitDeletedIcon",
+    ignored = "NvimTreeGitIgnoredIcon",
+  }
+
+  return { str = glyphs[kind], hl = { groups[kind] or "NvimTreeGitDirtyIcon" } }
+end
+
+local function node_status_kinds(node, section)
+  local kinds = {}
+  for _, item in ipairs(node.items or {}) do
+    local kind = git_status_kind(item.status, item.untracked, section)
+    if kind then
+      kinds[kind] = true
     end
   end
-  for _, file in ipairs(sorted_files(node.files)) do
-    lines[#lines + 1] = string.rep(" ", indent) .. tree_file_icon(file.path) .. tree_icons().icon_padding .. file.name
-    entries[#lines] = {
-      hash = hash,
-      old_path = file.old_path,
-      path = file.path,
-      status = file.status,
-    }
+
+  local ordered = { "staged", "unstaged", "renamed", "deleted", "unmerged", "untracked", "ignored" }
+  local out = {}
+  for _, kind in ipairs(ordered) do
+    if kinds[kind] then
+      out[#out + 1] = kind
+    end
+  end
+  return out
+end
+
+local function status_decorators(kinds)
+  local icons = {}
+  for _, kind in ipairs(kinds) do
+    icons[#icons + 1] = git_status_icon(kind)
+  end
+  return #icons > 0 and icons or nil
+end
+
+local function dir_status_decorator(section)
+  return function(dir)
+    return status_decorators(node_status_kinds(dir, section))
+  end
+end
+
+local function file_status_decorator(section)
+  return function(file)
+    return status_decorators({ git_status_kind(file.status, file.untracked, section) })
   end
 end
 
 local function render_commit_file_tree(paths, hash, dir_expanded)
-  local lines, entries = {}, {}
-  render_tree_node(build_file_tree(paths), hash, dir_expanded, 2, lines, entries)
-  return lines, entries
+  return tree_renderer.render_file_tree(paths, {
+    depth = 1,
+    dir_expanded = function(dir)
+      return dir_expanded[commit_dir_key(hash, dir.path)] ~= false
+    end,
+    dir_decorators_before = dir_status_decorator("commits"),
+    file_decorators_before = file_status_decorator("commits"),
+    dir_entry = function(dir)
+      return { hash = hash, dir = dir.path }
+    end,
+    file_entry = function(file)
+      return {
+        hash = hash,
+        old_path = file.old_path,
+        path = file.path,
+        status = file.status,
+      }
+    end,
+  })
 end
 
-local function status_hl(status)
-  if status == "A" or status == "?" then
-    return "Added"
-  elseif status == "D" then
-    return "Removed"
-  end
-  return "Changed" -- M R C T
-end
-
-local function status_label(status, untracked)
-  if untracked or status == "A" or status == "?" then
-    return "added"
-  elseif status == "D" then
-    return "deleted"
-  end
-  return "modified" -- M R C T and any other tracked content change
+local function render_change_file_tree(items, root, section, depth)
+  return tree_renderer.render_file_tree(items, {
+    depth = depth or 0,
+    dir_expanded = function(dir)
+      return state.change_dir_expanded[change_dir_key(section, dir.path)] ~= false
+    end,
+    dir_decorators_before = dir_status_decorator(section),
+    file_decorators_before = file_status_decorator(section),
+    dir_entry = function(dir)
+      return { change_dir = dir.path, section = section }
+    end,
+    file_entry = function(file)
+      return {
+        path = root and (root .. "/" .. file.path) or file.path,
+        repo_path = file.path,
+        section = section,
+        untracked = file.untracked,
+        status = file.status,
+      }
+    end,
+  })
 end
 
 -- Sticky, clickable section header. %@ regions need a v:lua-reachable
@@ -313,8 +337,8 @@ end
 local function winbar_for(idx)
   local section = SECTIONS[idx]
   local s = state.sections[section.key]
-  local marker = s.collapsed and "▸" or "▾"
-  return "%#GitPanelHeader#%" .. idx .. "@v:lua.GitPanelSectionClick@ " .. marker .. " " .. section.title .. " %X"
+  local marker = tree_arrow(not s.collapsed)
+  return "%#GitPanelHeader#%" .. idx .. "@v:lua.GitPanelSectionClick@ " .. marker .. section.title .. " %X"
 end
 
 local function refresh_winbars()
@@ -333,42 +357,14 @@ local function write_section(s, lines, marks)
   vim.bo[s.buf].modifiable = false
   vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
   for lnum, m in pairs(marks) do
-    vim.api.nvim_buf_set_extmark(s.buf, ns, lnum - 1, m.col, { end_col = m.end_col, hl_group = m.hl })
+    local line = m.line or lnum
+    vim.api.nvim_buf_set_extmark(s.buf, ns, line - 1, m.col, { end_col = m.end_col, hl_group = m.hl })
   end
 end
 
-local function render_change_tree_node(node, root, section, indent, lines, entries, marks)
-  for _, dir in ipairs(sorted_dirs(node.dirs)) do
-    local expanded = state.change_dir_expanded[change_dir_key(section, dir.path)] ~= false
-    local arrow = tree_arrow(expanded)
-    local icon = tree_folder_icon(expanded)
-    lines[#lines + 1] = string.rep(" ", indent) .. arrow .. icon .. tree_icons().icon_padding .. dir.name
-    entries[#lines] = { change_dir = dir.path, section = section }
-    if expanded then
-      render_change_tree_node(dir, root, section, indent + 2, lines, entries, marks)
-    end
-  end
-
-  for _, file in ipairs(sorted_files(node.files)) do
-    local label = status_label(file.status, file.untracked)
-    lines[#lines + 1] = string.rep(" ", indent)
-      .. tree_file_icon(file.path)
-      .. tree_icons().icon_padding
-      .. file.name
-      .. " ["
-      .. label
-      .. "]"
-    entries[#lines] = {
-      path = root .. "/" .. file.path,
-      repo_path = file.path,
-      section = section,
-      untracked = file.untracked,
-      status = file.status,
-    }
-    local label_start = lines[#lines]:find("[" .. label .. "]", 1, true)
-    if label_start then
-      marks[#lines] = { col = label_start - 1, end_col = #lines[#lines], hl = status_hl(file.status) }
-    end
+local function append_marks(target, source, offset)
+  for _, mark in pairs(source) do
+    target[#target + 1] = vim.tbl_extend("force", mark, { line = (mark.line or 1) + offset })
   end
 end
 
@@ -397,15 +393,21 @@ local function render_changes()
         local expanded = not state.folded[flag]
         local marker = tree_arrow(expanded)
         local icon = tree_folder_icon(expanded)
-        table.insert(lines, marker .. icon .. tree_icons().icon_padding .. name)
+        table.insert(lines, marker .. icon .. tree_renderer.icon_padding() .. name)
         entries[#lines] = { header = flag }
         marks[#lines] = { col = 0, end_col = #lines[#lines], hl = "Title" }
         if not expanded then
           return
         end
-        render_change_tree_node(build_file_tree(items), root, flag, 2, lines, entries, marks)
+        local offset = #lines
+        local tree_lines, tree_entries, tree_marks = render_change_file_tree(items, root, flag, 1)
+        for i, line in ipairs(tree_lines) do
+          table.insert(lines, line)
+          entries[#lines] = tree_entries[i]
+        end
+        append_marks(marks, tree_marks, offset)
       end
-      add_group("Staged", "staged", staged)
+      add_group("Staged Changes", "staged", staged)
       add_group("Changes", "changes", changes)
     end
   end
@@ -434,7 +436,8 @@ local function render_commits()
 
       if state.commit_expanded[c.hash] then
         state.commit_files[c.hash] = state.commit_files[c.hash] or git_commit_files(root, c.hash)
-        local tree_lines, tree_entries =
+        local offset = #lines
+        local tree_lines, tree_entries, tree_marks =
           render_commit_file_tree(state.commit_files[c.hash], c.hash, state.commit_dir_expanded)
         if #tree_lines == 0 then
           table.insert(lines, "  No files")
@@ -442,14 +445,8 @@ local function render_commits()
           for i, line in ipairs(tree_lines) do
             table.insert(lines, line)
             entries[#lines] = tree_entries[i]
-            if tree_entries[i].dir then
-              local icons = tree_icons()
-              local arrow_start = line:find(icons.arrow_open, 1, true) or line:find(icons.arrow_closed, 1, true)
-              if arrow_start then
-                marks[#lines] = { col = arrow_start - 1, end_col = arrow_start + #icons.arrow_open, hl = "Title" }
-              end
-            end
           end
+          append_marks(marks, tree_marks, offset)
         end
       end
     end
@@ -655,19 +652,27 @@ local function is_added_entry(entry)
   return entry.untracked or entry.status == "A" or entry.status == "?"
 end
 
+local function open_added_change(entry)
+  local root = state.root or repo_root()
+  if not root then
+    return
+  end
+  local repo_path = change_repo_path(entry, root)
+  local ref = entry.section == "staged" and "index" or "worktree"
+  local lines = entry.section == "staged" and (git_blob_lines(root, ":" .. repo_path) or {})
+    or read_file_lines(entry.path)
+  open_scratch("gitpanel://added/" .. ref .. "/" .. repo_path, lines, repo_path, {
+    label = file_rev_label(repo_path, ref),
+  })
+end
+
 local function select_entry(entry)
   if not entry then
     return
   end
 
   if is_added_entry(entry) then
-    local win = close_diffs(true) or main_win()
-    if win then
-      vim.api.nvim_set_current_win(win)
-    else
-      vim.cmd("botright vsplit")
-    end
-    vim.cmd("edit " .. vim.fn.fnameescape(entry.path))
+    open_added_change(entry)
     render()
     return
   end
@@ -969,6 +974,9 @@ end
 
 M._test = {
   render_commit_file_tree = render_commit_file_tree,
+  render_change_file_tree = function(items, section)
+    return render_change_file_tree(items, nil, section or "changes", 0)
+  end,
   open_change_entry = select_entry,
   open_commit_entry = function(root, entry)
     state.root = root

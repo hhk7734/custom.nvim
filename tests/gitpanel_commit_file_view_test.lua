@@ -131,8 +131,10 @@ local second_line
 for i, line in ipairs(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)) do
   if line:find("changed.txt", 1, true) then
     changed_line = i
+    assert(line:find(" ✗ changed.txt", 1, true), line)
   elseif line:find("second.txt", 1, true) then
     second_line = i
+    assert(line:find(" ✗ second.txt", 1, true), line)
   end
 end
 assert(changed_line, vim.inspect(vim.api.nvim_buf_get_lines(commits_buf, 0, -1, false)))

@@ -48,13 +48,16 @@ run({ "git", "config", "user.name", "Test User" }, root)
 
 vim.fn.writefile({ "old" }, root .. "/changed.txt")
 vim.fn.writefile({ "old-second" }, root .. "/second.txt")
+vim.fn.writefile({ "old-staged" }, root .. "/staged.txt")
 vim.fn.writefile({ "old" }, root .. "/deleted.txt")
-run({ "git", "add", "changed.txt", "second.txt", "deleted.txt" }, root)
+run({ "git", "add", "changed.txt", "second.txt", "staged.txt", "deleted.txt" }, root)
 run({ "git", "commit", "-m", "initial" }, root)
 vim.fn.writefile({ "new" }, root .. "/changed.txt")
 vim.fn.writefile({ "new-second" }, root .. "/second.txt")
+vim.fn.writefile({ "new-staged" }, root .. "/staged.txt")
 vim.fn.writefile({ "added" }, root .. "/added.txt")
 vim.fn.delete(root .. "/deleted.txt")
+run({ "git", "add", "staged.txt" }, root)
 
 vim.cmd("enew")
 vim.fn.chdir(root)
@@ -94,7 +97,8 @@ test.open_change_entry({
   status = "A",
 })
 
-assert(vim.api.nvim_buf_get_name(0) == root .. "/added.txt", vim.api.nvim_buf_get_name(0))
+assert(vim.api.nvim_buf_get_name(0):find("gitpanel://added/worktree/added.txt", 1, true), vim.api.nvim_buf_get_name(0))
+assert(vim.b[vim.api.nvim_get_current_buf()].gitpanel_tab_label == "added.txt (worktree)")
 assert(vim.deep_equal(vim.api.nvim_buf_get_lines(0, 0, -1, false), { "added" }))
 assert(not vim.wo.diff, "added file should open directly, not as a diff")
 
@@ -115,20 +119,24 @@ assert(changes_win, "changes window exists")
 local sidebar_width = vim.api.nvim_win_get_width(changes_win)
 
 local changes_buf = vim.api.nvim_win_get_buf(changes_win)
+assert(vim.wo[changes_win].winbar:find(" Changes", 1, true), vim.wo[changes_win].winbar)
 local rendered_changes = vim.api.nvim_buf_get_lines(changes_buf, 0, -1, false)
-assert(rendered_changes[1] == "  Changes", vim.inspect(rendered_changes))
+assert(rendered_changes[1] == "  Staged Changes", vim.inspect(rendered_changes))
+local saw_changes_group = false
 local changed_line
 local second_line
 for i, line in ipairs(rendered_changes) do
-  if line:find("changed.txt", 1, true) then
+  if line == "  Changes" then
+    saw_changes_group = true
+  elseif line:find("changed.txt", 1, true) then
     changed_line = i
-    assert(line:find("%[modified%]"), line)
-    assert(line:find(" changed.txt", 1, true), line)
+    assert(line:find(" ✗ changed.txt", 1, true), line)
   elseif line:find("second.txt", 1, true) then
     second_line = i
-    assert(line:find("%[modified%]"), line)
+    assert(line:find(" ✗ second.txt", 1, true), line)
   end
 end
+assert(saw_changes_group, vim.inspect(rendered_changes))
 assert(changed_line, vim.inspect(rendered_changes))
 assert(second_line, vim.inspect(rendered_changes))
 local initial_no_name_count = #listed_no_name_buffers()
@@ -137,8 +145,8 @@ local second_label = "second.txt (index) -> second.txt (worktree)"
 local has_added = false
 local has_deleted = false
 for _, line in ipairs(rendered_changes) do
-  has_added = has_added or (line:find("added.txt", 1, true) and line:find("%[added%]") ~= nil)
-  has_deleted = has_deleted or (line:find("deleted.txt", 1, true) and line:find("%[deleted%]") ~= nil)
+  has_added = has_added or (line:find(" ★ added.txt", 1, true) ~= nil)
+  has_deleted = has_deleted or (line:find("  deleted.txt", 1, true) ~= nil)
 end
 assert(has_added, vim.inspect(rendered_changes))
 assert(has_deleted, vim.inspect(rendered_changes))

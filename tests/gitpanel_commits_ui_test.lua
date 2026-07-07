@@ -13,6 +13,7 @@ for _, win in ipairs(vim.api.nvim_list_wins()) do
   end
 end
 assert(commit_win, "commits window exists")
+assert(vim.wo[commit_win].winbar:find(" Commits", 1, true), vim.wo[commit_win].winbar)
 
 local buf = vim.api.nvim_win_get_buf(commit_win)
 local before = vim.api.nvim_buf_get_lines(buf, 0, 2, false)
