@@ -57,6 +57,11 @@ assert(vim.api.nvim_win_get_width(activity_win) == activity_width, "activity bar
 
 local sidebar_wins = wins_by_ft("gitpanel")
 assert(#sidebar_wins == 2, "gitpanel sidebar must remain visible")
+for _, win in ipairs(sidebar_wins) do
+  local buf = vim.api.nvim_win_get_buf(win)
+  assert(not vim.bo[buf].modifiable, "Source Control buffers must stay nomodifiable")
+  assert(vim.bo[buf].readonly, "Source Control buffers must stay readonly")
+end
 local sidebar_width = vim.api.nvim_win_get_width(sidebar_wins[1])
 
 local changes_win = sidebar_wins[1]

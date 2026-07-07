@@ -59,7 +59,14 @@ return {
         -- Reset the timer after a double so a 3rd quick click starts fresh.
         last_click.time = is_double and 0 or now
         vim.schedule(function()
-          vim.cmd("buffer " .. bufnr)
+          local handled = false
+          local ok, gitpanel = pcall(require, "core.gitpanel")
+          if ok and gitpanel.show_diff_pair then
+            handled = gitpanel.show_diff_pair(bufnr)
+          end
+          if not handled then
+            vim.cmd("buffer " .. bufnr)
+          end
           if is_double then
             vim.cmd("BufferLineTogglePin")
           end

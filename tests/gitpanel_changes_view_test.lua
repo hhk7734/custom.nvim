@@ -40,6 +40,25 @@ local function count_gitpanel_tab_label(label)
   return count
 end
 
+local function gitpanel_buffers_with_label(label)
+  local buffers = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(buf) and vim.b[buf].gitpanel_tab_label == label then
+      buffers[#buffers + 1] = buf
+    end
+  end
+  return buffers
+end
+
+local function listed_gitpanel_buffer_with_label(label)
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].buflisted and vim.b[buf].gitpanel_tab_label == label then
+      return buf
+    end
+  end
+  return nil
+end
+
 local root = vim.fn.tempname()
 vim.fn.mkdir(root, "p")
 run({ "git", "init" }, root)
@@ -202,3 +221,43 @@ assert(
   #listed_no_name_buffers() == initial_no_name_count,
   "repeated changed file selection leaked [No Name] buffers: " .. vim.inspect(listed_no_name_buffers())
 )
+local second_tab = assert(listed_gitpanel_buffer_with_label(second_label), "second changed diff tab should exist")
+assert(gitpanel.show_diff_pair(second_tab), "selecting a hidden changed diff tab should restore its two-pane diff")
+local restored_second_tab = vim.wait(1000, function()
+  local wins = editor_windows()
+  if #wins ~= 2 then
+    return false
+  end
+  local left = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(wins[1]), 0, -1, false)
+  local right = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(wins[2]), 0, -1, false)
+  return vim.deep_equal(left, { "old-second" }) and vim.deep_equal(right, { "new-second" })
+end, 20)
+assert(restored_second_tab, "changed diff tab selection should restore the second two-pane diff")
+assert(vim.b[vim.api.nvim_get_current_buf()].gitpanel_tab_label == second_label)
+local changed_tab = assert(listed_gitpanel_buffer_with_label(changed_label), "changed diff tab should exist")
+assert(gitpanel.show_diff_pair(changed_tab), "selecting a hidden changed diff tab should restore its two-pane diff")
+local restored_changed_tab = vim.wait(1000, function()
+  local wins = editor_windows()
+  if #wins ~= 2 then
+    return false
+  end
+  local left = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(wins[1]), 0, -1, false)
+  local right = vim.api.nvim_buf_get_lines(vim.api.nvim_win_get_buf(wins[2]), 0, -1, false)
+  return vim.deep_equal(left, { "old" }) and vim.deep_equal(right, { "new" })
+end, 20)
+assert(restored_changed_tab, "changed diff tab selection should restore the first two-pane diff")
+assert(vim.b[vim.api.nvim_get_current_buf()].gitpanel_tab_label == changed_label)
+assert(#gitpanel_buffers_with_label(changed_label) == 2, vim.inspect(gitpanel_buffers_with_label(changed_label)))
+local closed_diff_buf = vim.api.nvim_get_current_buf()
+vim.api.nvim_buf_delete(closed_diff_buf, { force = true })
+local closed_pair = vim.wait(1000, function()
+  return #gitpanel_buffers_with_label(changed_label) == 0 and count_gitpanel_tab_label(changed_label) == 0
+end, 20)
+assert(closed_pair, "closing a GitPanel diff tab should delete both previous and updated buffers")
+assert(count_gitpanel_tab_label(second_label) == 1, "closing one diff pair should not delete another diff tab")
+assert(#editor_windows() == 1, "closing the visible diff pair should leave one editor window")
+assert(
+  vim.api.nvim_win_get_width(changes_win) == sidebar_width,
+  "sidebar width changed after closing visible diff pair"
+)
+assert(not vim.wo[editor_windows()[1]].diff, "remaining editor window should not stay in diff mode")

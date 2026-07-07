@@ -38,6 +38,8 @@ local state = {
   commit_files = {},
   -- repo root resolved on the last render; nil outside a git repo.
   root = nil,
+  diff_pair_autocmd = false,
+  closing_diff_pairs = {},
 }
 
 local function section_valid(s)
@@ -214,7 +216,7 @@ local function git_status_kind(status, untracked, section)
   if untracked or status == "?" then
     return "untracked"
   elseif status == "A" then
-    return section == "changes" and "untracked" or "staged"
+    return section == "staged" and "staged" or "untracked"
   elseif status == "D" then
     return "deleted"
   elseif status == "R" then
@@ -229,7 +231,7 @@ local function git_status_kind(status, untracked, section)
   return nil
 end
 
-local function git_status_icon(kind)
+local function git_status_icon(kind, section)
   if not kind then
     return nil
   end
@@ -267,23 +269,23 @@ local function node_status_kinds(node, section)
   return out
 end
 
-local function status_decorators(kinds)
+local function status_decorators(kinds, section)
   local icons = {}
   for _, kind in ipairs(kinds) do
-    icons[#icons + 1] = git_status_icon(kind)
+    icons[#icons + 1] = git_status_icon(kind, section)
   end
   return #icons > 0 and icons or nil
 end
 
 local function dir_status_decorator(section)
   return function(dir)
-    return status_decorators(node_status_kinds(dir, section))
+    return status_decorators(node_status_kinds(dir, section), section)
   end
 end
 
 local function file_status_decorator(section)
   return function(file)
-    return status_decorators({ git_status_kind(file.status, file.untracked, section) })
+    return status_decorators({ git_status_kind(file.status, file.untracked, section) }, section)
   end
 end
 
@@ -352,9 +354,11 @@ end
 
 -- Writes rendered lines + extmarks into a section buffer.
 local function write_section(s, lines, marks)
+  vim.bo[s.buf].readonly = false
   vim.bo[s.buf].modifiable = true
   vim.api.nvim_buf_set_lines(s.buf, 0, -1, false, lines)
   vim.bo[s.buf].modifiable = false
+  vim.bo[s.buf].readonly = true
   vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
   for lnum, m in pairs(marks) do
     local line = m.line or lnum
@@ -431,8 +435,15 @@ local function render_commits()
       local marker = tree_arrow(state.commit_expanded[c.hash])
       table.insert(lines, string.format("%s%s %s", marker, c.hash, c.subject))
       entries[#lines] = { hash = c.hash }
+      local line_nr = #lines
+      marks[#marks + 1] = {
+        line = line_nr,
+        col = 0,
+        end_col = #marker,
+        hl = state.commit_expanded[c.hash] and "NvimTreeFolderArrowOpen" or "NvimTreeFolderArrowClosed",
+      }
       local hash_start = lines[#lines]:find(c.hash, 1, true) - 1
-      marks[#lines] = { col = hash_start, end_col = hash_start + #c.hash, hl = "Identifier" }
+      marks[#marks + 1] = { line = line_nr, col = hash_start, end_col = hash_start + #c.hash, hl = "Identifier" }
 
       if state.commit_expanded[c.hash] then
         state.commit_files[c.hash] = state.commit_files[c.hash] or git_commit_files(root, c.hash)
@@ -494,11 +505,12 @@ local function close_diffs(keep_one)
   return keep_win
 end
 
+local SIDEBAR_FTS = { activitybar = true, gitpanel = true, NvimTree = true, panelterminal = true, panelproblems = true }
+
 -- First window that isn't a sidebar/panel occupant; nil if none exist.
 local function main_win()
-  local exclude = { activitybar = true, gitpanel = true, NvimTree = true, panelterminal = true, panelproblems = true }
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if not exclude[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
+    if not SIDEBAR_FTS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
       return win
     end
   end
@@ -575,6 +587,120 @@ local function scratch_buffer(name, lines, path, opts)
   return buf
 end
 
+local function diff_pair_key(a, b)
+  return tostring(math.min(a, b)) .. ":" .. tostring(math.max(a, b))
+end
+
+local function pair_windows(buf, pair_buf)
+  local pair = { [buf] = true, [pair_buf] = true }
+  local wins = {}
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if pair[vim.api.nvim_win_get_buf(win)] then
+      wins[#wins + 1] = win
+    end
+  end
+  return wins
+end
+
+local function has_non_pair_editor_window(buf, pair_buf)
+  local pair = { [buf] = true, [pair_buf] = true }
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    local win_buf = vim.api.nvim_win_get_buf(win)
+    if not pair[win_buf] and not SIDEBAR_FTS[vim.bo[win_buf].filetype] then
+      return true
+    end
+  end
+  return false
+end
+
+local function fallback_editor_buffer(buf, pair_buf)
+  local pair = { [buf] = true, [pair_buf] = true }
+  for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
+    if
+      not pair[candidate]
+      and vim.api.nvim_buf_is_valid(candidate)
+      and vim.bo[candidate].buflisted
+      and not is_gitpanel_diff_view(vim.api.nvim_buf_get_name(candidate))
+    then
+      return candidate
+    end
+  end
+
+  return vim.api.nvim_create_buf(true, false)
+end
+
+local function preserve_editor_window_if_last(buf, pair_buf)
+  if has_non_pair_editor_window(buf, pair_buf) then
+    return nil
+  end
+
+  local keep_win = pair_windows(buf, pair_buf)[1]
+  if not keep_win then
+    return nil
+  end
+
+  local replacement = fallback_editor_buffer(buf, pair_buf)
+  vim.api.nvim_win_set_buf(keep_win, replacement)
+  vim.wo[keep_win].diff = false
+  return keep_win
+end
+
+local function delete_buffer_if_valid(buf)
+  if vim.api.nvim_buf_is_valid(buf) then
+    pcall(vim.api.nvim_buf_del_var, buf, "gitpanel_diff_pair_buf")
+    pcall(vim.api.nvim_buf_delete, buf, { force = true })
+  end
+end
+
+local function close_diff_pair(buf, pair_buf)
+  if not (buf and pair_buf) then
+    return
+  end
+
+  local key = diff_pair_key(buf, pair_buf)
+  if state.closing_diff_pairs[key] then
+    return
+  end
+  state.closing_diff_pairs[key] = true
+
+  vim.schedule(function()
+    pcall(vim.cmd, "diffoff!")
+    local keep_win = preserve_editor_window_if_last(buf, pair_buf)
+    for _, win in ipairs(pair_windows(buf, pair_buf)) do
+      if win ~= keep_win and #vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(win)) > 1 then
+        pcall(vim.api.nvim_win_close, win, true)
+      end
+    end
+    delete_buffer_if_valid(buf)
+    delete_buffer_if_valid(pair_buf)
+    state.closing_diff_pairs[key] = nil
+  end)
+end
+
+local function ensure_diff_pair_autocmd()
+  if state.diff_pair_autocmd then
+    return
+  end
+  state.diff_pair_autocmd = true
+
+  local group = vim.api.nvim_create_augroup("gitpanel-diff-pairs", { clear = true })
+  vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
+    group = group,
+    callback = function(args)
+      local ok, pair_buf = pcall(vim.api.nvim_buf_get_var, args.buf, "gitpanel_diff_pair_buf")
+      if ok then
+        close_diff_pair(args.buf, pair_buf)
+      end
+    end,
+  })
+end
+
+local function link_diff_pair(left, right)
+  ensure_diff_pair_autocmd()
+  vim.b[left].gitpanel_diff_pair_buf = right
+  vim.b[right].gitpanel_diff_pair_buf = left
+end
+
 local function open_scratch(name, lines, path, opts)
   local win = close_diffs(true) or main_win()
   if win then
@@ -604,6 +730,7 @@ local function show_side_by_side(previous_name, previous_lines, updated_name, up
     listed = true,
     tab_label = opts.tab_label,
   })
+  link_diff_pair(left, right)
 
   local left_win = vim.api.nvim_get_current_win()
   vim.api.nvim_win_set_buf(left_win, left)
@@ -618,6 +745,46 @@ local function show_side_by_side(previous_name, previous_lines, updated_name, up
     vim.cmd("diffthis")
   end)
   vim.api.nvim_set_current_win(right_win)
+end
+
+local function show_existing_diff_pair(buf)
+  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
+    return false
+  end
+
+  local ok, pair_buf = pcall(vim.api.nvim_buf_get_var, buf, "gitpanel_diff_pair_buf")
+  if not (ok and vim.api.nvim_buf_is_valid(pair_buf)) then
+    return false
+  end
+
+  local name = vim.api.nvim_buf_get_name(buf)
+  local left = (name:find("previous/", 1, true) and buf) or pair_buf
+  local right = left == buf and pair_buf or buf
+  local win = close_diffs(true) or main_win()
+  if win then
+    vim.api.nvim_set_current_win(win)
+  else
+    vim.cmd("botright vsplit")
+  end
+
+  local left_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(left_win, left)
+  vim.cmd("rightbelow vertical split")
+  local right_win = vim.api.nvim_get_current_win()
+  vim.api.nvim_win_set_buf(right_win, right)
+
+  vim.api.nvim_win_call(left_win, function()
+    vim.cmd("diffthis")
+  end)
+  vim.api.nvim_win_call(right_win, function()
+    vim.cmd("diffthis")
+  end)
+  vim.api.nvim_set_current_win(right_win)
+  return true
+end
+
+function M.show_diff_pair(buf)
+  return show_existing_diff_pair(buf)
 end
 
 local function show_change_diff(entry)
@@ -847,6 +1014,8 @@ local function setup_buffer(key)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].filetype = "gitpanel"
   vim.bo[buf].modifiable = false
+  vim.bo[buf].readonly = true
+  vim.bo[buf].swapfile = false
   vim.bo[buf].bufhidden = "hide"
 
   local opts = { buffer = buf, silent = true, nowait = true }
@@ -942,10 +1111,19 @@ function M.toggle()
   end
 end
 
+local function apply_highlights()
+  vim.api.nvim_set_hl(0, "GitPanelHeader", { link = "Title" })
+end
+
 function M.setup()
-  vim.api.nvim_set_hl(0, "GitPanelHeader", { link = "Title", default = true })
+  apply_highlights()
 
   local group = vim.api.nvim_create_augroup("gitpanel", {})
+
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = group,
+    callback = apply_highlights,
+  })
 
   vim.api.nvim_create_autocmd({ "BufWritePost", "FocusGained" }, {
     group = group,

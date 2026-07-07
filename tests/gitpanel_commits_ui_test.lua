@@ -18,6 +18,15 @@ assert(vim.wo[commit_win].winbar:find(" Commits", 1, true), vim.wo[commit_win
 local buf = vim.api.nvim_win_get_buf(commit_win)
 local before = vim.api.nvim_buf_get_lines(buf, 0, 2, false)
 assert(before[1] and before[1]:match("^ %x+ "), vim.inspect(before))
+local before_marks =
+  vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_get_namespaces().gitpanel, 0, 1, { details = true })
+local has_closed_arrow_hl = false
+for _, mark in ipairs(before_marks) do
+  local _, row, col, details = unpack(mark)
+  has_closed_arrow_hl = has_closed_arrow_hl
+    or (row == 0 and col == 0 and details.hl_group == "NvimTreeFolderArrowClosed")
+end
+assert(has_closed_arrow_hl, vim.inspect(before_marks))
 
 gitpanel.click({ winid = commit_win, winrow = 2, line = 1 })
 vim.wait(1000, function()
