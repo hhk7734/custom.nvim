@@ -364,7 +364,15 @@ local function write_section(s, lines, marks)
   vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
   for lnum, m in pairs(marks) do
     local line = m.line or lnum
-    vim.api.nvim_buf_set_extmark(s.buf, ns, line - 1, m.col, { end_col = m.end_col, hl_group = m.hl })
+    if m.virt_text then
+      vim.api.nvim_buf_set_extmark(s.buf, ns, line - 1, m.col or 0, {
+        virt_text = m.virt_text,
+        virt_text_pos = m.virt_text_pos,
+        hl_mode = m.hl_mode or "combine",
+      })
+    else
+      vim.api.nvim_buf_set_extmark(s.buf, ns, line - 1, m.col, { end_col = m.end_col, hl_group = m.hl })
+    end
   end
 end
 
@@ -419,6 +427,7 @@ local function render_changes()
   end
 
   s.lines = entries
+  resize_handle.add_line_marks(marks, #lines)
   write_section(s, lines, marks)
 end
 

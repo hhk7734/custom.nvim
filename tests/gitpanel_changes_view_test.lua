@@ -1,6 +1,7 @@
 vim.opt.runtimepath:append(vim.fn.getcwd())
 
 local gitpanel = require("core.gitpanel")
+local resize_handle = require("core.sidebar.resize_handle")
 local test = assert(gitpanel._test, "gitpanel test helpers are exposed")
 
 local function run(cmd, cwd)
@@ -57,6 +58,28 @@ local function listed_gitpanel_buffer_with_label(label)
     end
   end
   return nil
+end
+
+local function has_changes_resize_handle(buf, row)
+  for _, mark in
+    ipairs(vim.api.nvim_buf_get_extmarks(buf, vim.api.nvim_get_namespaces().gitpanel, 0, -1, {
+      details = true,
+    }))
+  do
+    local details = mark[4]
+    if
+      mark[2] == row
+      and details
+      and details.virt_text_pos == "right_align"
+      and details.virt_text
+      and details.virt_text[1]
+      and details.virt_text[1][1] == resize_handle.INDICATOR
+      and details.virt_text[1][2] == "SidebarResizeHandle"
+    then
+      return true
+    end
+  end
+  return false
 end
 
 local root = vim.fn.tempname()
@@ -140,6 +163,10 @@ local sidebar_width = vim.api.nvim_win_get_width(changes_win)
 local changes_buf = vim.api.nvim_win_get_buf(changes_win)
 assert(vim.wo[changes_win].winbar:find(" Changes", 1, true), vim.wo[changes_win].winbar)
 local rendered_changes = vim.api.nvim_buf_get_lines(changes_buf, 0, -1, false)
+assert(#rendered_changes > 0, vim.inspect(rendered_changes))
+for row = 0, #rendered_changes - 1 do
+  assert(has_changes_resize_handle(changes_buf, row), "changes row missing resize handle: " .. (row + 1))
+end
 assert(rendered_changes[1] == "  Staged Changes", vim.inspect(rendered_changes))
 local saw_changes_group = false
 local changed_line
