@@ -10,8 +10,9 @@ return {
     -- Follow the active colorscheme (github-theme ships a lualine palette).
     theme = "auto",
     options = {
-      -- The activity bar is a narrow icon strip; no statusline under it.
-      disabled_filetypes = { statusline = { "activitybar" } },
+      -- The activity bar is a narrow icon strip and the search panel's input
+      -- section is fixed-height; no statusline under either.
+      disabled_filetypes = { statusline = { "activitybar", "searchpanelinput" } },
     },
   },
 }

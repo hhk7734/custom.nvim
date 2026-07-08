@@ -34,7 +34,7 @@
 
 ```text
 Activity bar  → lua/core/activitybar.lua
-Sidebar       → nvim-tree.lua / lua/core/gitpanel.lua
+Sidebar       → nvim-tree.lua / lua/core/gitpanel.lua / lua/core/searchpanel.lua
 Editor tabs   → bufferline.nvim
 Breadcrumbs   → dropbar.nvim
 Bottom panel  → lua/core/panel.lua

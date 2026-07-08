@@ -6,10 +6,17 @@ local last_click = { bufnr = nil, time = 0 }
 -- between the activity bar and the editor) can never match its own offsets
 -- entry. The activity bar's entry absorbs the sidebar's width as padding
 -- instead, synced by an autocmd below.
+local SIDEBAR_TITLES = {
+  NvimTree = "File Explorer",
+  gitpanel = "Source Control",
+  searchpanel = "Search",
+  searchpanelinput = "Search",
+}
+
 local function sidebar_win()
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
     local ft = vim.bo[vim.api.nvim_win_get_buf(win)].filetype
-    if (ft == "NvimTree" or ft == "gitpanel") and vim.api.nvim_win_get_config(win).relative == "" then
+    if SIDEBAR_TITLES[ft] and vim.api.nvim_win_get_config(win).relative == "" then
       return win, ft
     end
   end
@@ -85,12 +92,7 @@ return {
           filetype = "activitybar",
           text = function()
             local _, ft = sidebar_win()
-            if ft == "NvimTree" then
-              return "File Explorer"
-            elseif ft == "gitpanel" then
-              return "Source Control"
-            end
-            return ""
+            return SIDEBAR_TITLES[ft] or ""
           end,
           text_align = "center",
           separator = true,
@@ -104,6 +106,12 @@ return {
         {
           filetype = "gitpanel",
           text = "Source Control",
+          text_align = "center",
+          separator = true,
+        },
+        {
+          filetype = "searchpanelinput",
+          text = "Search",
           text_align = "center",
           separator = true,
         },

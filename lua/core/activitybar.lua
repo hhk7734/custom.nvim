@@ -29,7 +29,7 @@ local function win_with_ft(ft)
   return false
 end
 
--- Entries without is_active (e.g. Search) are transient and never highlighted.
+-- Entries without is_active (e.g. Plugins) are transient and never highlighted.
 local entries = {
   {
     icon = "󰉋",
@@ -37,6 +37,7 @@ local entries = {
     action = function()
       -- One sidebar occupant at a time, as in VSCode.
       require("core.gitpanel").close()
+      require("core.searchpanel").close()
       require("nvim-tree.api").tree.toggle()
     end,
     is_active = function()
@@ -47,7 +48,10 @@ local entries = {
     icon = "",
     desc = "Search",
     action = function()
-      require("telescope.builtin").live_grep()
+      require("core.searchpanel").toggle()
+    end,
+    is_active = function()
+      return win_with_ft("searchpanel")
     end,
   },
   {
@@ -130,6 +134,10 @@ local function on_click()
     if gitpanel and gitpanel.click(pos) then
       return ""
     end
+    local searchpanel = package.loaded["core.searchpanel"]
+    if searchpanel and searchpanel.click(pos) then
+      return ""
+    end
     local panel = package.loaded["core.panel"]
     if panel and panel.click(pos) then
       return ""
@@ -149,7 +157,7 @@ end
 
 -- Sidebar occupants that must stay a full-height column beside the bar; the
 -- bottom panel then only spans the editor area, as in VSCode.
-local SIDEBAR_FTS = { NvimTree = true, gitpanel = true }
+local SIDEBAR_FTS = { NvimTree = true, gitpanel = true, searchpanel = true, searchpanelinput = true }
 
 -- All non-floating sidebar windows in the current tabpage, ordered by
 -- screen row (gitpanel stacks section windows in one column).
@@ -349,6 +357,14 @@ function M.setup()
   vim.api.nvim_set_hl(0, "ActivityBarActive", { link = "Function", default = true })
 
   vim.keymap.set("n", "<LeftMouse>", on_click, { expr = true, desc = "activity bar click" })
+  -- The search panel's inputs are edited in insert mode; route clicks from
+  -- there too, leaving insert first so the activated action (open a result,
+  -- toggle a panel, ...) runs in normal mode. Unhandled clicks keep the
+  -- default insert-mode behavior.
+  vim.keymap.set("i", "<LeftMouse>", function()
+    local keys = on_click()
+    return keys == "" and "<Esc>" or keys
+  end, { expr = true, desc = "activity bar click" })
 
   local group = vim.api.nvim_create_augroup("activitybar", {})
 
