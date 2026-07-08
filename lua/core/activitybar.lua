@@ -58,7 +58,13 @@ local entries = {
     icon = "",
     desc = "Source Control",
     action = function()
-      require("core.gitpanel").toggle()
+      local gitpanel = require("core.gitpanel")
+      if win_with_ft("gitpanel") then
+        gitpanel.close()
+      else
+        gitpanel.open()
+        gitpanel.show_graph()
+      end
     end,
     is_active = function()
       return win_with_ft("gitpanel")

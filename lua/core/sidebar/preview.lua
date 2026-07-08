@@ -119,7 +119,7 @@ function M.scratch_buffer(name, lines, path, opts)
   vim.b[buf].sidebar_tab_label = opts.tab_label or opts.label
   vim.bo[buf].modifiable = true
   vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  local ft = vim.filetype.match({ filename = path })
+  local ft = path and vim.filetype.match({ filename = path }) or nil
   if ft then
     vim.bo[buf].filetype = ft
   end

@@ -9,6 +9,7 @@ local M = {}
 local tree_renderer = require("core.sidebar.tree_renderer")
 local resize_handle = require("core.sidebar.resize_handle")
 local preview = require("core.sidebar.preview")
+local gitgraph = require("core.sidebar.gitgraph")
 
 local WIDTH = 30
 -- Commits section's share of the sidebar column when the panel opens.
@@ -340,7 +341,13 @@ local function winbar_for(idx)
   local section = SECTIONS[idx]
   local s = state.sections[section.key]
   local marker = tree_arrow(not s.collapsed)
-  return "%#GitPanelHeader#%" .. idx .. "@v:lua.GitPanelSectionClick@ " .. marker .. section.title .. " %X"
+  local bar = "%#GitPanelHeader#%" .. idx .. "@v:lua.GitPanelSectionClick@ " .. marker .. section.title .. " %X"
+  if section.key == "commits" then
+    -- Right-aligned git graph button (docs/layout/sidebar/git-panel.md,
+    -- Graph Click). nr2char keeps the nerd-font glyph out of the source.
+    bar = bar .. "%=%@v:lua.GitPanelGraphClick@[" .. vim.fn.nr2char(0xF062C) .. "] %X"
+  end
+  return bar
 end
 
 local function refresh_winbars()
@@ -612,6 +619,61 @@ local function open_commit_file(entry)
   )
 end
 
+local GRAPH_LIMIT = 200
+
+-- row -> commit map of the last rendered graph, for <CR> selection.
+local graph_rows = {}
+
+local function graph_select(lnum)
+  local commit = graph_rows[lnum]
+  if not commit then
+    return
+  end
+
+  -- Reveal the commit in the Commits section.
+  state.commit_expanded[commit.hash] = true
+  render_commits()
+  local s = state.sections.commits
+  if section_valid(s) then
+    vim.api.nvim_set_current_win(s.win)
+    for row, entry in pairs(s.lines) do
+      if entry and entry.hash == commit.hash and not entry.path and not entry.dir then
+        pcall(vim.api.nvim_win_set_cursor, s.win, { row, 0 })
+        break
+      end
+    end
+  end
+end
+
+-- Opens the commit graph in the main area (the Commits header's graph
+-- button; see docs/layout/sidebar/git-panel.md, Graph Click). The lane
+-- layout comes from core.sidebar.gitgraph; <CR> on a row reveals that
+-- commit in the Commits section, and the cursor starts on HEAD.
+function M.show_graph()
+  local root = state.root or repo_root()
+  if not root then
+    return
+  end
+
+  local graph = gitgraph.build(root, { max_count = GRAPH_LIMIT })
+  graph_rows = graph.row_commits
+  preview.open_scratch("gitpanel://graph", graph.lines, nil, { label = "Git Graph", tab_label = "Git Graph" })
+
+  local buf = vim.api.nvim_get_current_buf()
+  vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
+  for _, m in ipairs(graph.marks) do
+    vim.api.nvim_buf_set_extmark(buf, ns, m.line - 1, m.col, { end_col = m.end_col, hl_group = m.hl })
+  end
+
+  vim.keymap.set("n", "<CR>", function()
+    graph_select(vim.api.nvim_win_get_cursor(0)[1])
+  end, { buffer = buf, silent = true, nowait = true, desc = "git panel: reveal commit from graph" })
+
+  if graph.head_lnum then
+    pcall(vim.api.nvim_win_set_cursor, 0, { graph.head_lnum, 0 })
+  end
+end
+
 local function toggle_change_dir(section, dir)
   local key = change_dir_key(section, dir)
   state.change_dir_expanded[key] = state.change_dir_expanded[key] == false
@@ -739,6 +801,14 @@ _G.GitPanelSectionClick = function(minwid, _, button)
   end
 end
 
+-- Winbar %@ click handler for the Commits header's graph button.
+_G.GitPanelGraphClick = function(_, _, button)
+  if button ~= "l" then
+    return
+  end
+  vim.schedule(M.show_graph)
+end
+
 local function setup_buffer(key)
   local buf = vim.api.nvim_create_buf(false, true)
   vim.bo[buf].filetype = "gitpanel"
@@ -844,6 +914,17 @@ end
 
 local function apply_highlights()
   vim.api.nvim_set_hl(0, "GitPanelHeader", { link = "Title" })
+  -- Cycling lane colors plus ref decorations, mirroring gitgraph.nvim's
+  -- GitGraphBranch1..5 / BranchName / BranchTag groups.
+  local branch_links = { "DiagnosticInfo", "DiagnosticOk", "DiagnosticWarn", "DiagnosticError", "DiagnosticHint" }
+  for i, link in ipairs(branch_links) do
+    vim.api.nvim_set_hl(0, "GitPanelGraphBranch" .. i, { link = link })
+  end
+  vim.api.nvim_set_hl(0, "GitPanelGraphBranchName", { link = "Function" })
+  vim.api.nvim_set_hl(0, "GitPanelGraphTag", { link = "Special" })
+  vim.api.nvim_set_hl(0, "GitPanelGraphHash", { link = "Identifier" })
+  vim.api.nvim_set_hl(0, "GitPanelGraphTimestamp", { link = "Comment" })
+  vim.api.nvim_set_hl(0, "GitPanelGraphAuthor", { link = "String" })
 end
 
 function M.setup()
