@@ -8,6 +8,7 @@ local M = {}
 
 local tree_renderer = require("core.sidebar.tree_renderer")
 local resize_handle = require("core.sidebar.resize_handle")
+local preview = require("core.sidebar.preview")
 
 local WIDTH = 30
 -- Commits section's share of the sidebar column when the panel opens.
@@ -39,9 +40,6 @@ local state = {
   commit_files = {},
   -- repo root resolved on the last render; nil outside a git repo.
   root = nil,
-  diff_pair_autocmd = false,
-  closing_diff_pairs = {},
-  quitting_from_preview = false,
 }
 
 local function section_valid(s)
@@ -478,56 +476,6 @@ local function render()
   refresh_winbars()
 end
 
-local function is_gitpanel_commit_diff_view(name)
-  return vim.startswith(name, "gitpanel://commit-previous/") or vim.startswith(name, "gitpanel://commit-updated/")
-end
-
-local function is_gitpanel_diff_view(name)
-  return vim.startswith(name, "gitpanel://previous/")
-    or vim.startswith(name, "gitpanel://updated/")
-    or is_gitpanel_commit_diff_view(name)
-end
-
--- Any gitpanel scratch shown in the editor area, including single-pane
--- previews (added files, commit files) that have no diff twin.
-local function is_gitpanel_preview(name)
-  return vim.startswith(name, "gitpanel://")
-end
-
--- Wipes previous diff state before opening another selection. When `keep_one`
--- is true, one existing GitPanel diff scratch window is reused as the next main
--- editor window, so closing stale panes cannot make the sidebar absorb the
--- whole editor area.
-local function close_diffs(keep_one)
-  pcall(vim.cmd, "diffoff!")
-  local keep_win = nil
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
-    local name = vim.api.nvim_buf_get_name(vim.api.nvim_win_get_buf(win))
-    if vim.startswith(name, "gitsigns://") then
-      pcall(vim.api.nvim_win_close, win, true)
-    elseif is_gitpanel_diff_view(name) then
-      if keep_one and not keep_win then
-        keep_win = win
-      else
-        pcall(vim.api.nvim_win_close, win, true)
-      end
-    end
-  end
-  return keep_win
-end
-
-local SIDEBAR_FTS = { activitybar = true, gitpanel = true, NvimTree = true, panelterminal = true, panelproblems = true }
-
--- First window that isn't a sidebar/panel occupant; nil if none exist.
-local function main_win()
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if not SIDEBAR_FTS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
-      return win
-    end
-  end
-  return nil
-end
-
 local function change_repo_path(entry, root)
   if entry.repo_path then
     return entry.repo_path
@@ -552,14 +500,6 @@ local function read_file_lines(path)
   return ok and lines or {}
 end
 
-local function buffer_by_name(name)
-  local bufnr = vim.fn.bufnr(name)
-  if bufnr > 0 and vim.api.nvim_buf_is_valid(bufnr) then
-    return bufnr
-  end
-  return nil
-end
-
 local function short_rev(root, rev)
   local res = vim.system({ "git", "-C", root, "rev-parse", "--short=7", rev }):wait()
   if res.code ~= 0 or not res.stdout then
@@ -576,316 +516,6 @@ local function diff_tab_label(previous_path, previous_rev, updated_path, updated
   return file_rev_label(previous_path, previous_rev) .. " -> " .. file_rev_label(updated_path, updated_rev)
 end
 
-local function scratch_buffer(name, lines, path, opts)
-  opts = opts or {}
-  local buf = buffer_by_name(name)
-  if not buf then
-    buf = vim.api.nvim_create_buf(opts.listed ~= false, true)
-    vim.api.nvim_buf_set_name(buf, name)
-  end
-
-  vim.bo[buf].buflisted = opts.listed ~= false
-  vim.b[buf].gitpanel_label = opts.label
-  vim.b[buf].gitpanel_tab_label = opts.tab_label or opts.label
-  vim.bo[buf].modifiable = true
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, lines)
-  local ft = vim.filetype.match({ filename = path })
-  if ft then
-    vim.bo[buf].filetype = ft
-  end
-  vim.bo[buf].modifiable = false
-  vim.bo[buf].bufhidden = opts.bufhidden or "hide"
-  return buf
-end
-
-local function diff_pair_key(a, b)
-  return tostring(math.min(a, b)) .. ":" .. tostring(math.max(a, b))
-end
-
-local function pair_windows(buf, pair_buf)
-  local pair = { [buf] = true, [pair_buf] = true }
-  local wins = {}
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if pair[vim.api.nvim_win_get_buf(win)] then
-      wins[#wins + 1] = win
-    end
-  end
-  return wins
-end
-
-local function has_non_pair_editor_window(buf, pair_buf)
-  local pair = { [buf] = true, [pair_buf] = true }
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    local win_buf = vim.api.nvim_win_get_buf(win)
-    if not pair[win_buf] and not SIDEBAR_FTS[vim.bo[win_buf].filetype] then
-      return true
-    end
-  end
-  return false
-end
-
-local function fallback_editor_buffer(buf, pair_buf)
-  local pair = {}
-  if buf then
-    pair[buf] = true
-  end
-  if pair_buf then
-    pair[pair_buf] = true
-  end
-
-  for _, candidate in ipairs(vim.api.nvim_list_bufs()) do
-    if
-      not pair[candidate]
-      and vim.api.nvim_buf_is_valid(candidate)
-      and vim.bo[candidate].buflisted
-      and not is_gitpanel_diff_view(vim.api.nvim_buf_get_name(candidate))
-    then
-      return candidate
-    end
-  end
-
-  return vim.api.nvim_create_buf(true, false)
-end
-
-local function editor_window_exists()
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if not SIDEBAR_FTS[vim.bo[vim.api.nvim_win_get_buf(win)].filetype] then
-      return true
-    end
-  end
-  return false
-end
-
-local function restore_editor_window_if_missing()
-  if state.quitting_from_preview or vim.v.dying > 0 or editor_window_exists() then
-    return
-  end
-
-  local anchor_win = nil
-  for _, s in pairs(state.sections) do
-    if section_valid(s) then
-      anchor_win = s.win
-      break
-    end
-  end
-  anchor_win = anchor_win or vim.api.nvim_get_current_win()
-
-  if not vim.api.nvim_win_is_valid(anchor_win) then
-    return
-  end
-
-  vim.api.nvim_set_current_win(anchor_win)
-  vim.cmd("botright vertical split")
-  local editor_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(editor_win, fallback_editor_buffer())
-  vim.wo[editor_win].diff = false
-
-  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
-    if vim.bo[vim.api.nvim_win_get_buf(win)].filetype == "gitpanel" then
-      pcall(vim.api.nvim_win_set_width, win, WIDTH)
-    end
-  end
-end
-
-local function preserve_editor_window_if_last(buf, pair_buf)
-  if has_non_pair_editor_window(buf, pair_buf) then
-    return nil
-  end
-
-  local keep_win = pair_windows(buf, pair_buf)[1]
-  if not keep_win then
-    return nil
-  end
-
-  local replacement = fallback_editor_buffer(buf, pair_buf)
-  vim.api.nvim_win_set_buf(keep_win, replacement)
-  vim.wo[keep_win].diff = false
-  return keep_win
-end
-
-local function delete_buffer_if_valid(buf)
-  if vim.api.nvim_buf_is_valid(buf) then
-    pcall(vim.api.nvim_buf_del_var, buf, "gitpanel_diff_pair_buf")
-    pcall(vim.api.nvim_buf_delete, buf, { force = true })
-  end
-end
-
-local function close_diff_pair(buf, pair_buf)
-  if not (buf and pair_buf) then
-    return
-  end
-
-  local key = diff_pair_key(buf, pair_buf)
-  if state.closing_diff_pairs[key] then
-    return
-  end
-  state.closing_diff_pairs[key] = true
-
-  vim.schedule(function()
-    pcall(vim.cmd, "diffoff!")
-    local keep_win = preserve_editor_window_if_last(buf, pair_buf)
-    for _, win in ipairs(pair_windows(buf, pair_buf)) do
-      if win ~= keep_win and #vim.api.nvim_tabpage_list_wins(vim.api.nvim_win_get_tabpage(win)) > 1 then
-        pcall(vim.api.nvim_win_close, win, true)
-      end
-    end
-    delete_buffer_if_valid(buf)
-    delete_buffer_if_valid(pair_buf)
-    state.closing_diff_pairs[key] = nil
-  end)
-end
-
-local function ensure_diff_pair_autocmd()
-  if state.diff_pair_autocmd then
-    return
-  end
-  state.diff_pair_autocmd = true
-
-  local group = vim.api.nvim_create_augroup("gitpanel-diff-pairs", { clear = true })
-  vim.api.nvim_create_autocmd("QuitPre", {
-    group = group,
-    callback = function()
-      local buf = vim.api.nvim_get_current_buf()
-      if state.quitting_from_preview or not is_gitpanel_preview(vim.api.nvim_buf_get_name(buf)) then
-        return
-      end
-
-      local ok, pair_buf = pcall(vim.api.nvim_buf_get_var, buf, "gitpanel_diff_pair_buf")
-      pair_buf = ok and pair_buf or nil
-      if has_non_pair_editor_window(buf, pair_buf or buf) then
-        -- Another editor window survives this quit: let :q close the pane
-        -- and take the rest of the preview down with it.
-        if pair_buf then
-          close_diff_pair(buf, pair_buf)
-        end
-        return
-      end
-
-      -- The preview is the last editor content; quit nvim entirely, as the
-      -- file explorer does when only the tree would remain.
-      state.quitting_from_preview = true
-      local command = vim.v.cmdbang == 1 and "qall!" or "qall"
-      local qok, err = pcall(vim.cmd, command)
-      if not qok then
-        state.quitting_from_preview = false
-        error(err)
-      end
-    end,
-  })
-  vim.api.nvim_create_autocmd({ "BufDelete", "BufWipeout" }, {
-    group = group,
-    callback = function(args)
-      local ok, pair_buf = pcall(vim.api.nvim_buf_get_var, args.buf, "gitpanel_diff_pair_buf")
-      if ok then
-        close_diff_pair(args.buf, pair_buf)
-      end
-    end,
-  })
-  vim.api.nvim_create_autocmd("BufWinLeave", {
-    group = group,
-    callback = function(args)
-      if is_gitpanel_diff_view(vim.api.nvim_buf_get_name(args.buf)) then
-        vim.schedule(restore_editor_window_if_missing)
-      end
-    end,
-  })
-end
-
-local function link_diff_pair(left, right)
-  ensure_diff_pair_autocmd()
-  vim.b[left].gitpanel_diff_pair_buf = right
-  vim.b[right].gitpanel_diff_pair_buf = left
-end
-
-local function open_scratch(name, lines, path, opts)
-  -- Single-pane previews have no diff pair, but still need the QuitPre and
-  -- editor-restore autocmds.
-  ensure_diff_pair_autocmd()
-  local win = close_diffs(true) or main_win()
-  if win then
-    vim.api.nvim_set_current_win(win)
-  else
-    vim.cmd("botright vsplit")
-  end
-  vim.api.nvim_win_set_buf(0, scratch_buffer(name, lines, path, opts))
-end
-
-local function show_side_by_side(previous_name, previous_lines, updated_name, updated_lines, path, opts)
-  opts = opts or {}
-  local win = close_diffs(true) or main_win()
-  if win then
-    vim.api.nvim_set_current_win(win)
-  else
-    vim.cmd("botright vsplit")
-  end
-
-  local left = scratch_buffer(previous_name, previous_lines, path, {
-    label = opts.previous_label,
-    listed = false,
-    tab_label = opts.tab_label,
-  })
-  local right = scratch_buffer(updated_name, updated_lines or {}, path, {
-    label = opts.updated_label,
-    listed = true,
-    tab_label = opts.tab_label,
-  })
-  link_diff_pair(left, right)
-
-  local left_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(left_win, left)
-  vim.cmd("rightbelow vertical split")
-  local right_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(right_win, right)
-
-  vim.api.nvim_win_call(left_win, function()
-    vim.cmd("diffthis")
-  end)
-  vim.api.nvim_win_call(right_win, function()
-    vim.cmd("diffthis")
-  end)
-  vim.api.nvim_set_current_win(right_win)
-end
-
-local function show_existing_diff_pair(buf)
-  if not (buf and vim.api.nvim_buf_is_valid(buf)) then
-    return false
-  end
-
-  local ok, pair_buf = pcall(vim.api.nvim_buf_get_var, buf, "gitpanel_diff_pair_buf")
-  if not (ok and vim.api.nvim_buf_is_valid(pair_buf)) then
-    return false
-  end
-
-  local name = vim.api.nvim_buf_get_name(buf)
-  local left = (name:find("previous/", 1, true) and buf) or pair_buf
-  local right = left == buf and pair_buf or buf
-  local win = close_diffs(true) or main_win()
-  if win then
-    vim.api.nvim_set_current_win(win)
-  else
-    vim.cmd("botright vsplit")
-  end
-
-  local left_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(left_win, left)
-  vim.cmd("rightbelow vertical split")
-  local right_win = vim.api.nvim_get_current_win()
-  vim.api.nvim_win_set_buf(right_win, right)
-
-  vim.api.nvim_win_call(left_win, function()
-    vim.cmd("diffthis")
-  end)
-  vim.api.nvim_win_call(right_win, function()
-    vim.cmd("diffthis")
-  end)
-  vim.api.nvim_set_current_win(right_win)
-  return true
-end
-
-function M.show_diff_pair(buf)
-  return show_existing_diff_pair(buf)
-end
-
 local function show_change_diff(entry)
   local root = state.root or repo_root()
   if not root then
@@ -900,7 +530,7 @@ local function show_change_diff(entry)
 
   local previous_ref = entry.section == "staged" and (short_rev(root, "HEAD") or "HEAD") or "index"
   local updated_ref = entry.section == "staged" and "index" or "worktree"
-  show_side_by_side(
+  preview.show_side_by_side(
     "gitpanel://previous/" .. repo_path,
     previous_lines,
     "gitpanel://updated/" .. repo_path,
@@ -927,7 +557,7 @@ local function open_added_change(entry)
   local ref = entry.section == "staged" and "index" or "worktree"
   local lines = entry.section == "staged" and (git_blob_lines(root, ":" .. repo_path) or {})
     or read_file_lines(entry.path)
-  open_scratch("gitpanel://added/" .. ref .. "/" .. repo_path, lines, repo_path, {
+  preview.open_scratch("gitpanel://added/" .. ref .. "/" .. repo_path, lines, repo_path, {
     label = file_rev_label(repo_path, ref),
   })
 end
@@ -958,7 +588,7 @@ local function open_commit_file(entry)
   local updated_lines = git_blob_lines(state.root, entry.hash .. ":" .. entry.path) or {}
   local name = "gitpanel://commit/" .. entry.hash .. "/" .. entry.path
   if is_added_entry(entry) then
-    open_scratch(name, updated_lines, entry.path, {
+    preview.open_scratch(name, updated_lines, entry.path, {
       label = file_rev_label(entry.path, short_rev(state.root, entry.hash) or entry.hash:sub(1, 7)),
     })
     return
@@ -968,7 +598,7 @@ local function open_commit_file(entry)
   local previous_lines = git_blob_lines(state.root, entry.hash .. "^:" .. previous_path) or {}
   local previous_ref = short_rev(state.root, entry.hash .. "^") or "root"
   local updated_ref = short_rev(state.root, entry.hash) or entry.hash:sub(1, 7)
-  show_side_by_side(
+  preview.show_side_by_side(
     "gitpanel://commit-previous/" .. entry.hash .. "/" .. previous_path,
     previous_lines,
     "gitpanel://commit-updated/" .. entry.hash .. "/" .. entry.path,
@@ -1156,6 +786,7 @@ function M.open()
   pcall(function()
     require("nvim-tree.api").tree.close()
   end)
+  require("core.searchpanel").close()
 
   for key, s in pairs(state.sections) do
     if not (s.buf and vim.api.nvim_buf_is_valid(s.buf)) then
@@ -1217,6 +848,7 @@ end
 
 function M.setup()
   apply_highlights()
+  preview.register("gitpanel", WIDTH)
 
   local group = vim.api.nvim_create_augroup("gitpanel", {})
 

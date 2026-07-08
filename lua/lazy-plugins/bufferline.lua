@@ -41,8 +41,8 @@ return {
       mode = "buffers",
       name_formatter = function(buf)
         local bufnr = buf.id or buf.bufnr
-        if bufnr and vim.b[bufnr].gitpanel_tab_label then
-          return vim.b[bufnr].gitpanel_tab_label
+        if bufnr and vim.b[bufnr].sidebar_tab_label then
+          return vim.b[bufnr].sidebar_tab_label
         end
         return nil
       end,
@@ -60,9 +60,9 @@ return {
         last_click.time = is_double and 0 or now
         vim.schedule(function()
           local handled = false
-          local ok, gitpanel = pcall(require, "core.gitpanel")
-          if ok and gitpanel.show_diff_pair then
-            handled = gitpanel.show_diff_pair(bufnr)
+          local ok, preview = pcall(require, "core.sidebar.preview")
+          if ok then
+            handled = preview.show_existing_pair(bufnr)
           end
           if not handled then
             vim.cmd("buffer " .. bufnr)
