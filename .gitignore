@@ -138,5 +138,3 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/lua,linux,macos,visualstudiocode,windows
-
-lazy-lock.json
