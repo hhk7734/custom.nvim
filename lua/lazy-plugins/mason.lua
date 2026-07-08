@@ -21,34 +21,16 @@ return {
     -- mason's public API. refresh() always invokes the callback.
     local registry = require("mason-registry")
     local Package = require("mason-core.package")
-
-    -- mason removed Package:is_installing(); derive it from the install handle
-    -- (an open handle means an install is queued or running).
-    local function is_installing(pkg)
-      return pkg:get_handle()
-        :map(function(handle)
-          return not handle:is_closed()
-        end)
-        :or_else(false)
-    end
-
     registry.refresh(function()
       for _, spec in ipairs(ensure_installed) do
         local name, version = Package.Parse(spec)
         local ok, pkg = pcall(registry.get_package, name)
-        if ok and not is_installing(pkg) then
-          if not pkg:is_installed() then
+        if ok and not pkg:is_installing() then
+          -- A pinned version that differs from the installed one is a mismatch;
+          -- an unpinned entry (no `@version`) only checks for presence.
+          local mismatched = version ~= nil and pkg:get_installed_version() ~= version
+          if not pkg:is_installed() or mismatched then
             pkg:install({ version = version })
-          elseif version ~= nil then
-            -- Installed already: Package:get_installed_version is now async
-            -- (callback-based). A pinned version that differs from the
-            -- installed one is a mismatch; reinstall at the pinned version.
-            -- (Unpinned entries only check for presence, handled above.)
-            pkg:get_installed_version(function(success, installed_version)
-              if not success or installed_version ~= version then
-                pkg:install({ version = version })
-              end
-            end)
           end
         end
       end
