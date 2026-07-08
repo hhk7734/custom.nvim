@@ -1,6 +1,6 @@
--- VSCode-style "Search" sidebar: a two-line input section (search query with
--- case-sensitivity and regex toggles, replacement text with a replace-all
--- button) above a results section listing matched files as a tree with one
+-- VSCode-style "Search" sidebar: two single-line input sections (search query
+-- with case-sensitivity and regex toggles, replacement text with a
+-- replace-all button) above a results section listing matched files as a tree with one
 -- sub-line per match — the found line, or its replace preview once a
 -- replacement is typed. Selecting a result opens the file, or a side-by-side
 -- replace preview when a replacement is set. Not a plugin; mirrors
@@ -18,11 +18,16 @@ local DEBOUNCE_MS = 250
 local MAX_MATCHES = 500
 local ns = vim.api.nvim_create_namespace("searchpanel")
 
-local QUERY_LINE, REPLACE_LINE = 1, 2
-local PLACEHOLDERS = { "Search", "Replace" }
+-- The input sections in top-to-bottom order. Each is its own window so the
+-- boundary row below it is a real, draggable resize handle, like the
+-- boundary between gitpanel's sections.
+local INPUTS = {
+  { key = "query", placeholder = "Search" },
+  { key = "replace", placeholder = "Replace" },
+}
 
 local state = {
-  input = {}, -- { win, buf }
+  inputs = { query = {}, replace = {} }, -- key -> { win, buf }
   results = {}, -- { win, buf, lines = lnum -> entry }
   query = "",
   replace = "",
@@ -195,48 +200,50 @@ local TOGGLES = {
 }
 
 local function render_input()
-  local s = state.input
-  if not (s.buf and vim.api.nvim_buf_is_valid(s.buf)) then
-    return
-  end
-  vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
-
-  local lines = vim.api.nvim_buf_get_lines(s.buf, 0, -1, false)
-  for lnum, placeholder in ipairs(PLACEHOLDERS) do
-    if (lines[lnum] or "") == "" then
-      vim.api.nvim_buf_set_extmark(s.buf, ns, lnum - 1, 0, {
-        virt_text = { { placeholder, "Comment" } },
-        virt_text_pos = "overlay",
-      })
+  for _, spec in ipairs(INPUTS) do
+    local s = state.inputs[spec.key]
+    if s.buf and vim.api.nvim_buf_is_valid(s.buf) then
+      vim.api.nvim_buf_clear_namespace(s.buf, ns, 0, -1)
+      if (vim.api.nvim_buf_get_lines(s.buf, 0, 1, false)[1] or "") == "" then
+        vim.api.nvim_buf_set_extmark(s.buf, ns, 0, 0, {
+          virt_text = { { spec.placeholder, "Comment" } },
+          virt_text_pos = "overlay",
+        })
+      end
     end
   end
 
-  local toggle_text = {}
-  for _, toggle in ipairs(TOGGLES) do
-    toggle_text[#toggle_text + 1] =
-      { toggle.label, state[toggle.flag] and "SearchPanelToggleOn" or "SearchPanelToggleOff" }
+  local query = state.inputs.query
+  if query.buf and vim.api.nvim_buf_is_valid(query.buf) then
+    local toggle_text = {}
+    for _, toggle in ipairs(TOGGLES) do
+      toggle_text[#toggle_text + 1] =
+        { toggle.label, state[toggle.flag] and "SearchPanelToggleOn" or "SearchPanelToggleOff" }
+    end
+    vim.api.nvim_buf_set_extmark(query.buf, ns, 0, 0, {
+      virt_text = toggle_text,
+      virt_text_pos = "right_align",
+    })
   end
-  vim.api.nvim_buf_set_extmark(s.buf, ns, QUERY_LINE - 1, 0, {
-    virt_text = toggle_text,
-    virt_text_pos = "right_align",
-  })
-  vim.api.nvim_buf_set_extmark(s.buf, ns, REPLACE_LINE - 1, 0, {
-    virt_text = { { "[󰛔]", "SearchPanelButton" } },
-    virt_text_pos = "right_align",
-  })
+
+  local replace = state.inputs.replace
+  if replace.buf and vim.api.nvim_buf_is_valid(replace.buf) then
+    vim.api.nvim_buf_set_extmark(replace.buf, ns, 0, 0, {
+      virt_text = { { "[󰛔]", "SearchPanelButton" } },
+      virt_text_pos = "right_align",
+    })
+  end
 end
 
--- The input buffer is exactly one query line and one replace line; pasted or
--- <CR>-split extra lines fold back into the replace line.
-local function clamp_input_lines()
-  local s = state.input
+-- Each input buffer is exactly one line; pasted or <CR>-split extras fold
+-- back into it.
+local function input_line(s)
   local lines = vim.api.nvim_buf_get_lines(s.buf, 0, -1, false)
-  if #lines == 2 then
-    return lines
+  if #lines > 1 then
+    lines = { table.concat(lines, "") }
+    vim.api.nvim_buf_set_lines(s.buf, 0, -1, false, lines)
   end
-  local clamped = { lines[1] or "", table.concat(vim.list_slice(lines, 2), "") }
-  vim.api.nvim_buf_set_lines(s.buf, 0, -1, false, clamped)
-  return clamped
+  return lines[1] or ""
 end
 
 local function run_search()
@@ -285,13 +292,14 @@ end
 -- Re-reads the inputs and re-runs the search; the public entry point for
 -- anything that changes query, replacement, or toggles.
 function M.refresh()
-  local s = state.input
-  if not (s.buf and vim.api.nvim_buf_is_valid(s.buf)) then
-    return
+  local query, replace = state.inputs.query, state.inputs.replace
+  for _, s in pairs({ query, replace }) do
+    if not (s.buf and vim.api.nvim_buf_is_valid(s.buf)) then
+      return
+    end
   end
-  local lines = clamp_input_lines()
-  state.query = lines[QUERY_LINE] or ""
-  state.replace = lines[REPLACE_LINE] or ""
+  state.query = input_line(query)
+  state.replace = input_line(replace)
   render_input()
   run_search()
 end
@@ -463,29 +471,33 @@ function M.replace_all(opts)
 end
 
 -- Routed here by activitybar's global <LeftMouse> dispatcher (same reasoning
--- as gitpanel.click). Toggle buttons live in right-aligned virtual text, so
--- clicks past the input text map onto them by column.
+-- as gitpanel.click). The buttons are right-aligned virtual text, so clicks
+-- there are mapped by screen coordinates (winrow/wincol): virtual-text
+-- clicks report a clamped buffer line/column.
 function M.click(pos)
-  local input, results = state.input, state.results
+  local query, replace, results = state.inputs.query, state.inputs.replace, state.results
 
-  if section_valid(input) and pos.winid == input.win then
-    if pos.winrow == 1 then
-      return false
-    end
-    local width = vim.api.nvim_win_get_width(input.win)
-    if pos.line == QUERY_LINE and pos.column > width - 9 then
+  if section_valid(query) and pos.winid == query.win then
+    local width = vim.api.nvim_win_get_width(query.win)
+    -- Row 1 is the winbar; the input line is row 2.
+    if pos.winrow == 2 and pos.wincol > width - 8 then
       vim.schedule(function()
-        toggle_flag(pos.column <= width - 4 and "case_sensitive" or "regex")
+        toggle_flag(pos.wincol <= width - 4 and "case_sensitive" or "regex")
       end)
       return true
     end
-    if pos.line == REPLACE_LINE and pos.column > width - 4 then
+    -- Let the click place the cursor for editing.
+    return false
+  end
+
+  if section_valid(replace) and pos.winid == replace.win then
+    local width = vim.api.nvim_win_get_width(replace.win)
+    if pos.winrow == 1 and pos.wincol > width - 3 then
       vim.schedule(function()
         M.replace_all()
       end)
       return true
     end
-    -- Let the click place the cursor for editing.
     return false
   end
 
@@ -516,15 +528,15 @@ function M.click(pos)
   return false
 end
 
-local function setup_input_buffer()
+local function setup_input_buffer(key)
   local buf = vim.api.nvim_create_buf(false, true)
-  -- Distinct filetype so lualine can skip just this fixed-height section
-  -- (no statusline between the inputs and the results tree).
+  -- Distinct filetype so lualine skips just these fixed-height sections;
+  -- their boundary rows render as bare, draggable resize handles.
   vim.bo[buf].filetype = "searchpanelinput"
   vim.bo[buf].buftype = "nofile"
   vim.bo[buf].swapfile = false
   vim.bo[buf].bufhidden = "hide"
-  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { state.query, state.replace })
+  vim.api.nvim_buf_set_lines(buf, 0, -1, false, { state[key] })
 
   vim.api.nvim_create_autocmd({ "TextChanged", "TextChangedI" }, {
     buffer = buf,
@@ -548,6 +560,12 @@ local function setup_input_buffer()
       vim.api.nvim_set_current_win(state.results.win)
     end
   end, vim.tbl_extend("force", opts, { desc = "search panel: focus results" }))
+  vim.keymap.set({ "n", "i" }, "<Tab>", function()
+    local other = state.inputs[key == "query" and "replace" or "query"]
+    if section_valid(other) then
+      vim.api.nvim_set_current_win(other.win)
+    end
+  end, vim.tbl_extend("force", opts, { desc = "search panel: switch input" }))
   vim.keymap.set("n", "q", M.close, vim.tbl_extend("force", opts, { desc = "search panel: close" }))
   return buf
 end
@@ -579,28 +597,44 @@ local function setup_results_buffer()
   return buf
 end
 
-local function style_window(win, is_input)
+local function style_window(win, kind)
   local wo = vim.wo[win]
   wo.winfixwidth = true
   wo.winfixbuf = true
   wo.number = false
   wo.relativenumber = false
-  wo.cursorline = not is_input
+  wo.cursorline = kind == "results"
   wo.signcolumn = "no"
   wo.foldcolumn = "0"
   wo.statuscolumn = ""
   wo.wrap = false
   wo.fillchars = "eob: "
-  if is_input then
-    wo.winbar = "%#SearchPanelHeader# Search %*"
+  if kind ~= "results" then
     wo.winfixheight = true
+  end
+  if kind == "query" then
+    wo.winbar = "%#SearchPanelHeader# Search %*"
   end
   resize_handle.style_section_window(win)
 end
 
+local function panel_sections()
+  return { state.inputs.query, state.inputs.replace, state.results }
+end
+
+local function panel_open()
+  for _, s in pairs(panel_sections()) do
+    if section_valid(s) then
+      return true
+    end
+  end
+  return false
+end
+
 function M.open()
-  if section_valid(state.input) then
-    vim.api.nvim_set_current_win(state.input.win)
+  local query, replace = state.inputs.query, state.inputs.replace
+  if section_valid(query) then
+    vim.api.nvim_set_current_win(query.win)
     return
   end
 
@@ -614,8 +648,11 @@ function M.open()
 
   state.root = search_root()
 
-  if not (state.input.buf and vim.api.nvim_buf_is_valid(state.input.buf)) then
-    state.input.buf = setup_input_buffer()
+  for _, spec in ipairs(INPUTS) do
+    local s = state.inputs[spec.key]
+    if not (s.buf and vim.api.nvim_buf_is_valid(s.buf)) then
+      s.buf = setup_input_buffer(spec.key)
+    end
   end
   if not (state.results.buf and vim.api.nvim_buf_is_valid(state.results.buf)) then
     state.results.buf = setup_results_buffer()
@@ -623,35 +660,41 @@ function M.open()
 
   local bar_win = find_win("activitybar")
   if bar_win then
-    state.input.win = vim.api.nvim_open_win(state.input.buf, true, {
+    query.win = vim.api.nvim_open_win(query.buf, true, {
       win = bar_win,
       split = "right",
       width = WIDTH,
     })
   else
     vim.cmd("topleft " .. WIDTH .. "vsplit")
-    state.input.win = vim.api.nvim_get_current_win()
-    vim.api.nvim_win_set_buf(state.input.win, state.input.buf)
+    query.win = vim.api.nvim_get_current_win()
+    vim.api.nvim_win_set_buf(query.win, query.buf)
   end
 
+  replace.win = vim.api.nvim_open_win(replace.buf, false, {
+    win = query.win,
+    split = "below",
+  })
   state.results.win = vim.api.nvim_open_win(state.results.buf, false, {
-    win = state.input.win,
+    win = replace.win,
     split = "below",
   })
 
-  style_window(state.input.win, true)
-  style_window(state.results.win, false)
-  -- The winbar occupies the window's first row; 3 keeps both input lines
-  -- visible below it.
-  vim.api.nvim_win_set_height(state.input.win, 3)
+  style_window(query.win, "query")
+  style_window(replace.win, "replace")
+  style_window(state.results.win, "results")
+  -- Winbar plus the query line; the replace section is its single line; the
+  -- results section absorbs the rest.
+  vim.api.nvim_win_set_height(query.win, 2)
+  vim.api.nvim_win_set_height(replace.win, 1)
 
   render_input()
   render_results()
-  vim.api.nvim_win_set_cursor(state.input.win, { QUERY_LINE, 0 })
+  vim.api.nvim_win_set_cursor(query.win, { 1, 0 })
 end
 
 function M.close()
-  for _, s in pairs({ state.input, state.results }) do
+  for _, s in pairs(panel_sections()) do
     if section_valid(s) then
       -- Closing the last window of a tabpage is an error (E444).
       local tab = vim.api.nvim_win_get_tabpage(s.win)
@@ -664,7 +707,7 @@ function M.close()
 end
 
 function M.toggle()
-  if section_valid(state.input) or section_valid(state.results) then
+  if panel_open() then
     M.close()
   else
     M.open()
