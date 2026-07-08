@@ -62,6 +62,10 @@ local function is_pair_view(name)
   return starts_with_any(name, PAIR_PREFIXES)
 end
 
+function M.is_sidebar_ft(ft)
+  return SIDEBAR_FTS[ft] == true
+end
+
 -- First window that isn't a sidebar/panel occupant; nil if none exist.
 function M.main_win()
   for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do

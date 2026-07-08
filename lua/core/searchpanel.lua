@@ -46,6 +46,7 @@ local state = {
   -- Increments per refresh; async results from stale runs are dropped.
   seq = 0,
   timer = nil,
+  quitting = false,
 }
 
 local function section_valid(s)
@@ -730,6 +731,59 @@ function M.setup()
   vim.api.nvim_create_autocmd("ColorScheme", {
     group = group,
     callback = apply_highlights,
+  })
+
+  -- :q behaves like the file explorer: when the panel is open and the quit
+  -- would leave at most the panel plus one editor window, :q anywhere —
+  -- including inside a panel section — escalates to quitting nvim. With more
+  -- editor windows, :q in a panel section closes the whole panel and :q in
+  -- an editor window keeps its default behavior. Preview scratches are
+  -- handled by core.sidebar.preview's own QuitPre handler.
+  vim.api.nvim_create_autocmd("QuitPre", {
+    group = group,
+    callback = function()
+      if state.quitting or not panel_open() then
+        return
+      end
+      if preview.is_preview(vim.api.nvim_buf_get_name(vim.api.nvim_get_current_buf())) then
+        return
+      end
+
+      local cur = vim.api.nvim_get_current_win()
+      local in_panel = false
+      for _, s in pairs(panel_sections()) do
+        if cur == s.win then
+          in_panel = true
+        end
+      end
+      local cur_is_editor = not preview.is_sidebar_ft(vim.bo[vim.api.nvim_win_get_buf(cur)].filetype)
+      if not (in_panel or cur_is_editor) then
+        return
+      end
+
+      local editors = 0
+      for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+        if win ~= cur and not preview.is_sidebar_ft(vim.bo[vim.api.nvim_win_get_buf(win)].filetype) then
+          editors = editors + 1
+        end
+      end
+
+      if (cur_is_editor and editors >= 1) or (in_panel and editors >= 2) then
+        if in_panel then
+          -- Quitting one section takes the whole panel down with it.
+          vim.schedule(M.close)
+        end
+        return
+      end
+
+      state.quitting = true
+      local command = vim.v.cmdbang == 1 and "qall!" or "qall"
+      local ok, err = pcall(vim.cmd, command)
+      if not ok then
+        state.quitting = false
+        error(err)
+      end
+    end,
   })
 
   vim.api.nvim_create_user_command("SearchPanel", function(cmd)
