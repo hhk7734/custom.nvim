@@ -242,9 +242,13 @@ local function render_tree_node(node, opts, depth, lines, entries, marks)
   end
 
   for _, file in ipairs(sorted_files(node.files)) do
+    -- Files with children (e.g. search matches) fold like directories.
+    local children = opts.file_children and opts.file_children(file) or nil
+    local has_children = children and #children > 0
+    local expanded = has_children and (opts.file_expanded or default_is_expanded)(file)
     local line, line_marks = M.render_line({
       depth = depth,
-      arrows = { str = " " .. icon_config().folder_arrow_padding },
+      arrows = has_children and M.folder_arrow(expanded) or { str = " " .. icon_config().folder_arrow_padding },
       icon = opts.file_icon and opts.file_icon(file) or M.file_icon(file.path),
       decorators_before = opts.file_decorators_before and opts.file_decorators_before(file),
       decorators_after = opts.file_decorators_after and opts.file_decorators_after(file),
@@ -254,6 +258,21 @@ local function render_tree_node(node, opts, depth, lines, entries, marks)
     entries[#lines] = (opts.file_entry or default_file_entry)(file)
     for _, mark in ipairs(line_marks) do
       marks[#marks + 1] = mark
+    end
+
+    if has_children and expanded then
+      for _, child in ipairs(children) do
+        local child_line, child_marks = M.render_line({
+          depth = depth + 1,
+          arrows = { str = " " .. icon_config().folder_arrow_padding },
+          name = opts.child_name and opts.child_name(child, file) or { str = tostring(child) },
+        }, #lines + 1)
+        lines[#lines + 1] = child_line
+        entries[#lines] = opts.child_entry and opts.child_entry(child, file) or child
+        for _, mark in ipairs(child_marks) do
+          marks[#marks + 1] = mark
+        end
+      end
     end
   end
 end
