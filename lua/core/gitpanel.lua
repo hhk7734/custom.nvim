@@ -41,7 +41,7 @@ local state = {
   root = nil,
   diff_pair_autocmd = false,
   closing_diff_pairs = {},
-  quitting_from_commit_diff = false,
+  quitting_from_preview = false,
 }
 
 local function section_valid(s)
@@ -488,6 +488,12 @@ local function is_gitpanel_diff_view(name)
     or is_gitpanel_commit_diff_view(name)
 end
 
+-- Any gitpanel scratch shown in the editor area, including single-pane
+-- previews (added files, commit files) that have no diff twin.
+local function is_gitpanel_preview(name)
+  return vim.startswith(name, "gitpanel://")
+end
+
 -- Wipes previous diff state before opening another selection. When `keep_one`
 -- is true, one existing GitPanel diff scratch window is reused as the next main
 -- editor window, so closing stale panes cannot make the sidebar absorb the
@@ -651,7 +657,7 @@ local function editor_window_exists()
 end
 
 local function restore_editor_window_if_missing()
-  if state.quitting_from_commit_diff or vim.v.dying > 0 or editor_window_exists() then
+  if state.quitting_from_preview or vim.v.dying > 0 or editor_window_exists() then
     return
   end
 
@@ -739,15 +745,29 @@ local function ensure_diff_pair_autocmd()
   vim.api.nvim_create_autocmd("QuitPre", {
     group = group,
     callback = function()
-      if state.quitting_from_commit_diff or not is_gitpanel_commit_diff_view(vim.api.nvim_buf_get_name(0)) then
+      local buf = vim.api.nvim_get_current_buf()
+      if state.quitting_from_preview or not is_gitpanel_preview(vim.api.nvim_buf_get_name(buf)) then
         return
       end
 
-      state.quitting_from_commit_diff = true
+      local ok, pair_buf = pcall(vim.api.nvim_buf_get_var, buf, "gitpanel_diff_pair_buf")
+      pair_buf = ok and pair_buf or nil
+      if has_non_pair_editor_window(buf, pair_buf or buf) then
+        -- Another editor window survives this quit: let :q close the pane
+        -- and take the rest of the preview down with it.
+        if pair_buf then
+          close_diff_pair(buf, pair_buf)
+        end
+        return
+      end
+
+      -- The preview is the last editor content; quit nvim entirely, as the
+      -- file explorer does when only the tree would remain.
+      state.quitting_from_preview = true
       local command = vim.v.cmdbang == 1 and "qall!" or "qall"
-      local ok, err = pcall(vim.cmd, command)
-      if not ok then
-        state.quitting_from_commit_diff = false
+      local qok, err = pcall(vim.cmd, command)
+      if not qok then
+        state.quitting_from_preview = false
         error(err)
       end
     end,
@@ -778,6 +798,9 @@ local function link_diff_pair(left, right)
 end
 
 local function open_scratch(name, lines, path, opts)
+  -- Single-pane previews have no diff pair, but still need the QuitPre and
+  -- editor-restore autocmds.
+  ensure_diff_pair_autocmd()
   local win = close_diffs(true) or main_win()
   if win then
     vim.api.nvim_set_current_win(win)
