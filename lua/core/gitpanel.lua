@@ -659,6 +659,10 @@ function M.show_graph()
   graph_rows = graph.row_commits
   preview.open_scratch("gitpanel://graph", graph.lines, nil, { label = "Git Graph", tab_label = "Git Graph" })
 
+  -- Wrapped rows break the lane column alignment; buffer-local so the
+  -- window's wrap setting is untouched for files opened afterwards.
+  vim.wo[0][0].wrap = false
+
   local buf = vim.api.nvim_get_current_buf()
   vim.api.nvim_buf_clear_namespace(buf, ns, 0, -1)
   for _, m in ipairs(graph.marks) do
