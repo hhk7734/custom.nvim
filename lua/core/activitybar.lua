@@ -17,6 +17,7 @@ local state = {
   win = nil,
   -- buffer line number -> entry, rebuilt on every render
   lines = {},
+  quitting = false,
 }
 
 -- true if any window (any tabpage) shows a buffer with this filetype
@@ -358,6 +359,31 @@ function M.toggle()
   M.open()
 end
 
+-- true when quitting the given window would leave only the bar: no other
+-- non-floating window exists. Panels with their own QuitPre escalation
+-- (previews, search panel, the tree) still have windows at this point and
+-- make this false.
+local function quit_strands_bar(cur)
+  if not (state.win and vim.api.nvim_win_is_valid(state.win)) or cur == state.win then
+    return false
+  end
+  for _, win in ipairs(vim.api.nvim_tabpage_list_wins(0)) do
+    if win ~= cur and win ~= state.win and vim.api.nvim_win_get_config(win).relative == "" then
+      return false
+    end
+  end
+  return true
+end
+
+local function has_modified_buffer()
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.bo[buf].buflisted and vim.bo[buf].modified then
+      return true
+    end
+  end
+  return false
+end
+
 function M.setup()
   vim.api.nvim_set_hl(0, "ActivityBarInactive", { link = "Comment", default = true })
   vim.api.nvim_set_hl(0, "ActivityBarActive", { link = "Function", default = true })
@@ -405,6 +431,40 @@ function M.setup()
     group = group,
     callback = function()
       vim.schedule(leave_bar)
+    end,
+  })
+
+  -- The bar is permanent, so :q on the last editor window would strand a
+  -- bar-only layout instead of exiting (e.g. `echo hi | nvim` then :q).
+  -- Typed :q/:q! become :qa/:qa! so refusals and the bang keep native
+  -- quit-all semantics: QuitPre cannot see v:cmdbang, and an autocmd can
+  -- only refuse a quit by erroring, which a banged quit ignores.
+  vim.keymap.set("ca", "q", function()
+    if
+      vim.fn.getcmdtype() == ":"
+      and vim.fn.getcmdline() == "q"
+      and quit_strands_bar(vim.api.nvim_get_current_win())
+    then
+      return "qa"
+    end
+    return "q"
+  end, { expr = true, desc = "activity bar: :q on the last editor window quits nvim" })
+
+  -- Quits that skip the cmdline (ZZ, :x, :wq, vim.cmd) still reach QuitPre
+  -- directly. Escalate those to qall only when no buffer is modified: that
+  -- qall cannot be refused, so the escalation never has to abort the
+  -- original quit. With modified buffers the quit keeps native behavior.
+  vim.api.nvim_create_autocmd("QuitPre", {
+    group = group,
+    callback = function()
+      if state.quitting or has_modified_buffer() or not quit_strands_bar(vim.api.nvim_get_current_win()) then
+        return
+      end
+      state.quitting = true
+      vim.schedule(function()
+        state.quitting = false
+      end)
+      vim.cmd("qall")
     end,
   })
 
