@@ -925,7 +925,9 @@ local function apply_highlights()
     vim.api.nvim_set_hl(0, "GitPanelGraphBranch" .. i, { link = link })
   end
   vim.api.nvim_set_hl(0, "GitPanelGraphBranchName", { link = "Function" })
-  vim.api.nvim_set_hl(0, "GitPanelGraphTag", { link = "Special" })
+  -- Special resolves to the plain foreground in github_dark_default, which
+  -- left tags uncolored; DiagnosticWarn gives the conventional tag yellow.
+  vim.api.nvim_set_hl(0, "GitPanelGraphTag", { link = "DiagnosticWarn" })
   vim.api.nvim_set_hl(0, "GitPanelGraphHash", { link = "Identifier" })
   vim.api.nvim_set_hl(0, "GitPanelGraphTimestamp", { link = "Comment" })
   vim.api.nvim_set_hl(0, "GitPanelGraphAuthor", { link = "String" })
